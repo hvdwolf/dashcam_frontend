@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">DashCam</string>
+    <string name="action_settings">Settings</string>
+    <string name="section_format">Hello World from section: %1$d</string>
+    <string-array name="segment_list_times">
+        <item>30</item>
+        <item>45</item>
+        <item>60</item>
+        <item>120</item>
+        <item>180</item>
+        <item>240</item>
+        <item>300</item>
+        <item>600</item>
+        <item>900</item>
+    </string-array>
+</resources>

@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" >
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical" >
+
+        <!-- Top section, things like "enabled" switch, segment length (time). -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal" >
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Storage path:"/>
+            <EditText
+                android:id="@+id/basepath"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+        <Space
+            android:layout_width="wrap_content"
+            android:layout_height="15dp" />
+        <LinearLayout
+            android:id="@+id/slengthlayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal" >
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Segment length:"/>
+            <Spinner
+                android:id="@+id/segment_length"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:entries="@array/segment_list_times" />
+        </LinearLayout>
+        <Space
+            android:layout_width="wrap_content"
+            android:layout_height="15dp" />
+        <Switch
+            android:id="@+id/autostart"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Auto Start"
+            android:checked="false" />
+        <Space
+            android:id="@+id/space2"
+            android:layout_width="wrap_content"
+            android:layout_height="15dp" />
+        <!-- Expert mode switch. Hides deviceview layout and calculated params, shows manualstring layout -->
+        <Switch
+            android:id="@+id/expert"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Expert Mode"
+            android:checked="false" />
+        <Space
+            android:layout_width="wrap_content"
+            android:layout_height="15dp" />
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#FF888888"/>
+
+        <!-- Contains the list of /dev/video* devices available -->
+        <LinearLayout
+            android:id="@+id/deviceview"
+            android:orientation="vertical"
+            android:visibility="visible"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+        <Space
+            android:layout_width="wrap_content"
+            android:layout_height="15dp" />
+        <!-- Contains the generated ffmpeg parameter set -->
+        <TextView
+            android:id="@+id/ffmparamslabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="GENERATED PARAMETER SET: "/>
+        <TextView
+            android:id="@+id/ffmparams"
+            android:visibility="visible"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <EditText
+            android:id="@+id/expertinput"
+            android:visibility="gone"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+        <Space
+            android:layout_width="wrap_content"
+            android:layout_height="15dp" />
+        <Button
+            android:id="@+id/setting_save"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Apply" />
+
+    </LinearLayout>
+</ScrollView>
