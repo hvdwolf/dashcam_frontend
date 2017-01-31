@@ -4,9 +4,11 @@ import android.app.AlarmManager;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.location.GpsStatus;
@@ -28,11 +30,7 @@ import com.github.hiteshsondhi88.libffmpeg.LoadBinaryResponseHandler;
 import com.github.hiteshsondhi88.libffmpeg.exceptions.FFmpegCommandAlreadyRunningException;
 import com.github.hiteshsondhi88.libffmpeg.exceptions.FFmpegNotSupportedException;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.OutputStreamWriter;
 import java.text.SimpleDateFormat;
-import java.util.Calendar;
 import java.util.Date;
 
 public class DashCamService extends Service {
@@ -43,11 +41,10 @@ public class DashCamService extends Service {
     private FFmpeg ffmpeg;
     private AlarmManager alarmManager;
     private PendingIntent cleanupIntent;
-    private String path;
     private LocationManager locationManager;
-    private GpsStatus gs = null;
-    private OutputStreamWriter gpslog = null;
     private LocationListener locationListener;
+    private boolean verboseLogging = false;
+    private SQLiteDatabase db = null;
 
     @Override
     public void onCreate() {
@@ -118,8 +115,7 @@ public class DashCamService extends Service {
         locationManager.addNmeaListener(new GpsStatus.NmeaListener(){
             @Override
             public void onNmeaReceived(long timestamp, String nmea){
-                if (gpslog != null)
-                    writeGpsLog(nmea);
+                writeGpsLog(nmea);
                 Log.d("DashCam GPS", new SimpleDateFormat("yyyy.MM.dd HH:mm:ss z").format(new Date(timestamp))+": NMEA: "+nmea);
             }
         });
@@ -151,7 +147,20 @@ public class DashCamService extends Service {
     private void startFFmpeg(){
         locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, locationListener);
         SharedPreferences prefs = getSharedPreferences("Settings", MODE_MULTI_PROCESS);
-        path=prefs.getString("path", "/mnt/external_sdio");
+        String path=prefs.getString("path", "/mnt/external_sdio");
+
+        try {
+            boolean internalLogging = prefs.getBoolean("loginternal", false);
+            Context dbc = getApplicationContext();
+            if (!internalLogging) dbc = new DatabaseContext(dbc);
+            String dbpath = (internalLogging?"":path+"/")+"dashcam.db";
+            db = new BetterSQLiteOpenHelper(dbc, dbpath, null, Constants.VALUES.DATABASE_VERSION).getWritableDatabase();
+        } catch (Exception e){
+            e.printStackTrace();
+            db = null;
+        }
+
+        verboseLogging = prefs.getBoolean("verbose", false);
 
         // Fire cleanup alarm every X minutes
         int microseconds = prefs.getInt("cleancycle", 5) * 60 * 1000; // default 5 minutes = 300000 microseconds
@@ -170,7 +179,6 @@ public class DashCamService extends Service {
         //But the logic behind it is very nice, it essentially disables itself if timeout == Long.MAX_VALUE,
         //so it will never timeout.
         if (!ffmpeg.isFFmpegCommandRunning()) {
-            openGpsLog();
             String cmd = prefs.getString("command","-copyts -f v4l2 -input_format mjpeg -video_size 640x480 -i /dev/video5 -c:v copy -f ssegment -strftime 1 -segment_time 60 -segment_atclocktime 1 -reset_timestamps 1 /mnt/external_sdio/cam_%Y-%m-%d_%H-%M-%S.mkv");
             if (cmd.length() < 1) cmd = "-copyts -f v4l2 -input_format mjpeg -video_size 640x480 -i /dev/video5 -c:v copy -f ssegment -strftime 1 -segment_time 60 -segment_atclocktime 1 -reset_timestamps 1 /mnt/external_sdio/cam_%Y-%m-%d_%H-%M-%S.mkv";
             String[] command = cmd.split(" ");
@@ -232,7 +240,7 @@ public class DashCamService extends Service {
                 @Override
                 public void onFailure(String s) {
                     Log.d(LOG_TAG, "FAILED with output : "+s);
-                    writelog("ERROR: "+s);
+                    writelog("E", s);
                     updateNotification(false);
                     locationManager.removeUpdates(locationListener);
                 }
@@ -240,25 +248,27 @@ public class DashCamService extends Service {
                 @Override
                 public void onSuccess(String s) {
                     Log.d(LOG_TAG, "SUCCESS with output : "+s);
-                    writelog("SUCCESS: "+s);
+                    writelog("S", s);
                     updateNotification(false);
                     locationManager.removeUpdates(locationListener);
                 }
 
                 @Override
-                public void onProgress(String s) {}
+                public void onProgress(String s) {
+                    if (verboseLogging) writelog("P", s);
+                }
 
                 @Override
                 public void onStart() {
                     Log.d(LOG_TAG, "Started command : ffmpeg " + TextUtils.join(" ", command));
-                    writelog("STARTING COMMAND: ffmpeg " + TextUtils.join(" ", command));
+                    writelog("S", "ffmpeg " + TextUtils.join(" ", command));
                     updateNotification(true);
                 }
 
                 @Override
                 public void onFinish() {
                     Log.d(LOG_TAG, "Finished command : ffmpeg "+ TextUtils.join(" ", command));
-                    writelog("FINISHED COMMAND");//: ffmpeg " + TextUtils.join(" ", command));
+                    writelog("F", "Command completed");
                     updateNotification(false);
                     locationManager.removeUpdates(locationListener);
                 }
@@ -266,50 +276,22 @@ public class DashCamService extends Service {
         } catch (FFmpegCommandAlreadyRunningException e) {e.printStackTrace();}
     }
 
-    private void writelog(String s){
-        SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss/");
-        String formattedDate = df.format(Calendar.getInstance().getTime());
-
-        try {
-            OutputStreamWriter out = new OutputStreamWriter(new FileOutputStream(new File(path+"/dashcam.log"), true));
-
-            out.append(formattedDate + s);
-            out.append('\n');
-            out.close();
-        } catch (Exception e) {
-            Log.d(LOG_TAG, e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    private void openGpsLog(){
-        SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss");
-        String formattedDate = "/gps_"+df.format(Calendar.getInstance().getTime())+".nmea";
-        try {
-            gpslog = new OutputStreamWriter(new FileOutputStream(new File(path + formattedDate), true));
-        } catch (Exception e){
-            Log.d(LOG_TAG, e.getMessage());
-            e.printStackTrace();
+    private void writelog(String code, String value){
+        if (db != null) {
+            for(String val : value.split("\n")) {
+                ContentValues cv = new ContentValues();
+                cv.put("type", code);
+                cv.put("value", val);
+                db.insert("log", null, cv);
+            }
         }
     }
 
     private void writeGpsLog(String s){
-        try {
-            gpslog.append(s+"\n");
-            gpslog.flush();
-        } catch (Exception e){
-            Log.d(LOG_TAG, e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    private void closeGpsLog(){
-        try {
-            gpslog.close();
-            gpslog = null;
-        } catch (Exception e){
-            Log.d(LOG_TAG, e.getMessage());
-            e.printStackTrace();
+        if (db != null){
+            ContentValues cv = new ContentValues();
+            cv.put("value", s.replace("\n",""));
+            db.insert("gps", null, cv);
         }
     }
 
@@ -320,7 +302,6 @@ public class DashCamService extends Service {
         stopFFmpeg();
         Log.d(LOG_TAG, "In onDestroy");
         IS_SERVICE_RUNNING=false;
-        closeGpsLog();
     }
 
     @Override

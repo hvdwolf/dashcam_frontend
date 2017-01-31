@@ -1,17 +1,21 @@
 package tk.rabidbeaver.dashcam;
 
-public class Constants {
+class Constants {
 
-    public interface ACTION {
-        public static String MAIN_ACTION = "tk.rabidbeaver.dashcam.dashcamservice.action.main";
-        public static String ACTION_RECORD = "tk.rabidbeaver.dashcam.dashcamservice.action.record";
-        public static String ACTION_STOP = "tk.rabidbeaver.dashcam.dashcamservice.action.stop";
-        public static String STARTFOREGROUND_ACTION = "tk.rabidbeaver.dashcam.dashcamservice.action.startforeground";
-        public static String STOPFOREGROUND_ACTION = "tk.rabidbeaver.dashcam.dashcamservice.action.stopforeground";
-        public static String ACTION_RESTART = "tk.rabidbeaver.dashcam.dashcamservice.action.restart";
+    interface ACTION {
+        String MAIN_ACTION = "tk.rabidbeaver.dashcam.dashcamservice.action.main";
+        String ACTION_RECORD = "tk.rabidbeaver.dashcam.dashcamservice.action.record";
+        String ACTION_STOP = "tk.rabidbeaver.dashcam.dashcamservice.action.stop";
+        String STARTFOREGROUND_ACTION = "tk.rabidbeaver.dashcam.dashcamservice.action.startforeground";
+        String STOPFOREGROUND_ACTION = "tk.rabidbeaver.dashcam.dashcamservice.action.stopforeground";
+        String ACTION_RESTART = "tk.rabidbeaver.dashcam.dashcamservice.action.restart";
     }
 
-    public interface NOTIFICATION_ID {
-        public static int FOREGROUND_SERVICE = 101;
+    interface NOTIFICATION_ID {
+        int FOREGROUND_SERVICE = 101;
+    }
+
+    interface VALUES {
+        int DATABASE_VERSION = 1;
     }
 }

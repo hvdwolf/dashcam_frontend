@@ -3,6 +3,7 @@ package tk.rabidbeaver.dashcam;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.StatFs;
 import android.util.Log;
 
@@ -13,6 +14,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+
+import static android.content.Context.MODE_PRIVATE;
 
 // Note: This receiver is defined in the manifest using
 // android:process="tk.rabidbeaver.dashcam.cleanupreceiver"
@@ -51,10 +54,23 @@ public class CleanupReceiver extends BroadcastReceiver {
         if (freeBytes < reqFreeBytes){
             long recover = reqFreeBytes - freeBytes;
             long recovered = 0;
+            long lastModified = 0;
             while (recovered < recover && !files.isEmpty()){
                 File f = files.remove(0);
                 recovered += f.length();
+                lastModified = f.lastModified();
                 if (!f.delete()) Log.d("FilesFragment", "error");
+            }
+
+            if (lastModified > 0){
+                SharedPreferences prefs = context.getSharedPreferences("Settings", MODE_PRIVATE);
+                String rootpath = prefs.getString("path", "/mnt/external_sdio");
+                boolean internalLogging = prefs.getBoolean("loginternal", false);
+                Context dbc = context;
+                if (!internalLogging) dbc = new DatabaseContext(dbc);
+                String dbpath = (internalLogging?"":rootpath+"/")+"dashcam.db";
+                new BetterSQLiteOpenHelper(dbc, dbpath, null, Constants.VALUES.DATABASE_VERSION).getWritableDatabase()
+                        .execSQL("DELETE FROM log WHERE time <= datetime("+lastModified+", 'unixepoch', 'localtime')");
             }
         }
     }

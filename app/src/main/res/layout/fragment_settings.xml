@@ -50,7 +50,24 @@
             android:text="Auto Start"
             android:checked="false" />
         <Space
-            android:id="@+id/space2"
+            android:layout_width="wrap_content"
+            android:layout_height="15dp" />
+        <Switch
+            android:id="@+id/loginternal"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Internal Log"
+            android:checked="false" />
+        <Space
+            android:layout_width="wrap_content"
+            android:layout_height="15dp" />
+        <Switch
+            android:id="@+id/verbose"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Log Verbose"
+            android:checked="false" />
+        <Space
             android:layout_width="wrap_content"
             android:layout_height="15dp" />
         <!-- Expert mode switch. Hides deviceview layout and calculated params, shows manualstring layout -->

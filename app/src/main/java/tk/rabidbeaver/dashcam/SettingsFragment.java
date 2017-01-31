@@ -26,6 +26,7 @@ import com.github.hiteshsondhi88.libffmpeg.FFmpeg;
 import com.github.hiteshsondhi88.libffmpeg.LoadBinaryResponseHandler;
 
 import java.io.File;
+import java.util.ArrayList;
 
 import static android.content.Context.MODE_PRIVATE;
 
@@ -35,7 +36,7 @@ public class SettingsFragment extends Fragment {
     private LayoutInflater inflater;
     private ViewGroup container;
     private FFmpeg ffmpeg;
-    private String[][] cameraOP = null;
+    private ArrayList<String[][]> cameraOPList = new ArrayList<>();
     private SharedPreferences prefs;
     private Spinner segment_length;
     private boolean from_format_selection = false;
@@ -96,6 +97,28 @@ public class SettingsFragment extends Fragment {
         });
         autostart.setChecked(prefs.getBoolean("autostart",true));
 
+        Switch internal = (Switch) rootView.findViewById(R.id.loginternal);
+        internal.setChecked(prefs.getBoolean("loginternal", false));
+        internal.setOnCheckedChangeListener(new Switch.OnCheckedChangeListener(){
+            @Override
+            public void onCheckedChanged(CompoundButton compoundButton, boolean b){
+                SharedPreferences.Editor prefedit = prefs.edit();
+                prefedit.putBoolean("loginternal",b);
+                prefedit.apply();
+            }
+        });
+
+        Switch verbose = (Switch) rootView.findViewById(R.id.verbose);
+        verbose.setChecked(prefs.getBoolean("verbose", false));
+        verbose.setOnCheckedChangeListener(new Switch.OnCheckedChangeListener(){
+            @Override
+            public void onCheckedChanged(CompoundButton compoundButton, boolean b){
+                SharedPreferences.Editor prefedit = prefs.edit();
+                prefedit.putBoolean("verbose",b);
+                prefedit.apply();
+            }
+        });
+
         Switch expert = (Switch) rootView.findViewById(R.id.expert);
         expert.setOnCheckedChangeListener(new Switch.OnCheckedChangeListener(){
             @Override
@@ -105,7 +128,6 @@ public class SettingsFragment extends Fragment {
                 TextView ffmparams_label = (TextView) rootView.findViewById(R.id.ffmparamslabel);
                 Button settings_save = (Button) rootView.findViewById(R.id.setting_save);
                 LinearLayout slength_layout = (LinearLayout) rootView.findViewById(R.id.slengthlayout);
-                Space space2 = (Space) rootView.findViewById(R.id.space2);
                 TextView expertinput = (TextView) rootView.findViewById(R.id.expertinput);
                 SharedPreferences.Editor prefedit = prefs.edit();
                 if (b){
@@ -113,8 +135,7 @@ public class SettingsFragment extends Fragment {
                     ffmparams.setVisibility(View.GONE);
                     ffmparams_label.setVisibility(View.GONE);
                     settings_save.setVisibility(View.GONE);
-                    slength_layout.setVisibility(View.GONE);
-                    space2.setVisibility(View.GONE);
+                    slength_layout.setVisibility(View.INVISIBLE);
                     expertinput.setVisibility(View.VISIBLE);
                     prefedit.putBoolean("expert",true);
 
@@ -124,7 +145,6 @@ public class SettingsFragment extends Fragment {
                     ffmparams_label.setVisibility(View.VISIBLE);
                     settings_save.setVisibility(View.VISIBLE);
                     slength_layout.setVisibility(View.VISIBLE);
-                    space2.setVisibility(View.VISIBLE);
                     expertinput.setVisibility(View.GONE);
                     prefedit.putBoolean("expert",false);
                 }
@@ -216,117 +236,145 @@ public class SettingsFragment extends Fragment {
         // readable for untrusted_app.
         File devfs = new File("/dev");
         File[] devices = devfs.listFiles();
+        //File[] devices = new File[2];
+        //devices[0] = new File("/dev/video0");
+        //devices[1] = new File("/dev/video1");
+
         LinearLayout device;
 
-        if (devices != null) for (File f : devices) if (f.isFile() && f.getName().contains("video")){
-            device = (LinearLayout) inflater.inflate(R.layout.device, container, false);
-            final TextView devLabel = (TextView) device.findViewById(R.id.devlab);
-            final CheckBox devbox = (CheckBox) device.findViewById(R.id.devbox);
-            String devicepath=f.getName();
-            devLabel.setText(devicepath);
+        if (devices != null){
+            Log.d("SettingsFragment", "devices != null");
+            for (File f : devices){
+                Log.d("SettingsFragment", f.getName());
+                if (/*f.isFile() && */f.getName().contains("video")) {
+                    Log.d("SettingsFragment", "name contains video");
+                    device = (LinearLayout) inflater.inflate(R.layout.device, container, false);
+                    final TextView devLabel = (TextView) device.findViewById(R.id.devlab);
+                    final CheckBox devbox = (CheckBox) device.findViewById(R.id.devbox);
+                    String devicepath = "/dev/" + f.getName();
+                    devLabel.setText(devicepath);
 
-            deviceView.addView(device);
+                    final TextView devpar = (TextView) device.findViewById(R.id.devpar);
 
-            final TextView devpar = (TextView)device.findViewById(R.id.devpar);
+                    String[][] cameraOP = null;
 
-            try {
-                cameraOP = ffmpeg.getCameraOutputFormats(devicepath);
-            } catch (Exception e){e.printStackTrace();}
+                    try {
+                        cameraOP = ffmpeg.getCameraOutputFormats(devicepath);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
 
-            if (cameraOP[0][0].contains("Raw")){
-                String[] tmp = cameraOP[0];
-                cameraOP[0] = cameraOP[1];
-                cameraOP[1] = tmp;
-            }
+                    if (cameraOP != null && cameraOP.length > 0 && cameraOP[0] != null && cameraOP[0].length > 0 && cameraOP[0][0] != null) {
 
-            final String[] formats = new String[cameraOP.length];
-            for (int j=0; j<cameraOP.length; j++) formats[j] = cameraOP[j][1];
+                        if (cameraOP[0][0].contains("Raw")) {
+                            String[] tmp = cameraOP[0];
+                            cameraOP[0] = cameraOP[1];
+                            cameraOP[1] = tmp;
+                        }
 
-            ArrayAdapter<String> sadapt = new ArrayAdapter<>(this.getContext(), android.R.layout.simple_spinner_item, formats);
-            sadapt.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-            final Spinner format = (Spinner)device.findViewById(R.id.formatspin);
-            format.setAdapter(sadapt);
+                        final String[] formats = new String[cameraOP.length];
+                        for (int j = 0; j < cameraOP.length; j++) formats[j] = cameraOP[j][1];
 
-            final String[] resolutions = new String[cameraOP[0].length-2];
-            //for (int j=0; j<cameraOP[0].length-2; j++) resolutions[j]=cameraOP[0][j+2];
-            System.arraycopy(cameraOP[0], 2, resolutions, 0, cameraOP[0].length-1);
+                        ArrayAdapter<String> sadapt = new ArrayAdapter<>(this.getContext(), android.R.layout.simple_spinner_item, formats);
+                        sadapt.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+                        final Spinner format = (Spinner) device.findViewById(R.id.formatspin);
+                        format.setAdapter(sadapt);
+                        format.setLabelFor(cameraOPList.size()); // abuse the "labelFor" attribute to store array index.
 
-            final Spinner resolution = (Spinner)device.findViewById(R.id.resspin);
-            ArrayAdapter<String> radapt = new ArrayAdapter<>(this.getContext(), android.R.layout.simple_spinner_item, resolutions);
-            radapt.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-            resolution.setAdapter(radapt);
+                        final String[] resolutions = new String[cameraOP[0].length - 2];
+                        for (int j = 0; j < cameraOP[0].length - 2; j++)
+                            resolutions[j] = cameraOP[0][j + 2];
 
-            format.setOnItemSelectedListener(new Spinner.OnItemSelectedListener(){
-                @Override
-                public void onItemSelected(AdapterView<?> parent, View view, int pos,long id){
-                    String[] resolutions = new String[cameraOP[pos].length-2];
-                    //for (int j=0; j<cameraOP[pos].length-2; j++) resolutions[j]=cameraOP[pos][j+2];
-                    System.arraycopy(cameraOP[pos], 2, resolutions, 0, cameraOP[pos].length-1);
-                    ArrayAdapter<String> radapt = new ArrayAdapter<>(SettingsFragment.this.getContext(), android.R.layout.simple_spinner_item, resolutions);
-                    radapt.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-                    from_format_selection = true;
-                    resolution.setAdapter(radapt);
-                }
+                        cameraOPList.add(cameraOP);
 
-                @Override
-                public void onNothingSelected(AdapterView<?> parent){}
-            });
+                        final Spinner resolution = (Spinner) device.findViewById(R.id.resspin);
+                        ArrayAdapter<String> radapt = new ArrayAdapter<>(this.getContext(), android.R.layout.simple_spinner_item, resolutions);
+                        radapt.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+                        resolution.setAdapter(radapt);
 
-            resolution.setOnItemSelectedListener(new Spinner.OnItemSelectedListener(){
-                @Override
-                public void onItemSelected(AdapterView<?> parent, View view, int pos,long id){
-                    if (from_format_selection){
+                        format.setOnItemSelectedListener(new Spinner.OnItemSelectedListener() {
+                            @Override
+                            public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
+                                String[][] cameraOP = cameraOPList.get(parent.getLabelFor());
+                                if (cameraOP != null) {
+                                    String[] resolutions = new String[cameraOP[pos].length - 2];
+                                    for (int j = 0; j < cameraOP[pos].length - 2; j++)
+                                        resolutions[j] = cameraOP[pos][j + 2];
+                                    ArrayAdapter<String> radapt = new ArrayAdapter<>(SettingsFragment.this.getContext(), android.R.layout.simple_spinner_item, resolutions);
+                                    radapt.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+                                    from_format_selection = true;
+                                    resolution.setAdapter(radapt);
+                                }
+                            }
 
-                        String path = ((TextView)((View)parent.getParent()).findViewById(R.id.devlab)).getText().toString();
-                        int numdev = prefs.getInt("num_cams", 0);
-                        for (int i=0; i<numdev; i++){
-                            if (prefs.getString("cam"+Integer.toString(i)+"_path", "").contentEquals(path)){
-                                String setres = prefs.getString("cam"+Integer.toString(i)+"_resolution", "640x480");
-                                for (int j=0; j<resolutions.length; j++) if (resolutions[j].contentEquals(setres)) resolution.setSelection(j);
+                            @Override
+                            public void onNothingSelected(AdapterView<?> parent) {
+                            }
+                        });
+
+                        resolution.setOnItemSelectedListener(new Spinner.OnItemSelectedListener() {
+                            @Override
+                            public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
+                                if (from_format_selection) {
+
+                                    String path = ((TextView) ((View) parent.getParent()).findViewById(R.id.devlab)).getText().toString();
+                                    int numdev = prefs.getInt("num_cams", 0);
+                                    for (int i = 0; i < numdev; i++) {
+                                        if (prefs.getString("cam" + Integer.toString(i) + "_path", "").contentEquals(path)) {
+                                            String setres = prefs.getString("cam" + Integer.toString(i) + "_resolution", "640x480");
+                                            for (int j = 0; j < resolutions.length; j++)
+                                                if (resolutions[j].contentEquals(setres))
+                                                    resolution.setSelection(j);
+                                            break;
+                                        }
+                                    }
+
+                                    from_format_selection = false;
+                                }
+                                devpar.setText("-f v4l2 -input_format " + formats[format.getSelectedItemPosition()] + " -video_size " + resolutions[pos] + " -i " + devLabel.getText() + " -c:v copy");
+                                updateParams();
+                            }
+
+                            @Override
+                            public void onNothingSelected(AdapterView<?> parent) {
+                            }
+                        });
+
+                        for (int j = 0; j < prefs.getInt("num_cams", 0); j++) {
+                            String path = prefs.getString("cam" + Integer.toString(j) + "_path", "");
+                            if (path.contentEquals(devicepath)) {
+                                devbox.setChecked(true);
+                                String nformat = prefs.getString("cam" + Integer.toString(j) + "_format", "");
+                                for (int k = 0; k < formats.length; k++) {
+                                    if (formats[k].contentEquals(nformat)) {
+                                        format.setSelection(k);
+                                        break;
+                                    }
+                                }
+
                                 break;
                             }
                         }
 
-                        from_format_selection = false;
+                        devpar.setText("-f v4l2 -input_format " + formats[format.getSelectedItemPosition()] + " -video_size " + resolutions[resolution.getSelectedItemPosition()] + " -i " + devLabel.getText() + " -c:v copy");
+
+                        devbox.setOnCheckedChangeListener(new CheckBox.OnCheckedChangeListener() {
+                            @Override
+                            public void onCheckedChanged(CompoundButton cb, boolean b) {
+                                updateParams();
+                            }
+                        });
+
+                        deviceView.addView(device);
                     }
-                    devpar.setText("-f v4l2 -input_format "+formats[format.getSelectedItemPosition()]+" -video_size "+resolutions[pos]+" -i "+devLabel.getText()+" -c:v copy");
-                    updateParams();
-                }
-
-                @Override
-                public void onNothingSelected(AdapterView<?> parent){}
-            });
-
-            for (int j=0; j<prefs.getInt("num_cams", 0); j++){
-                String path = prefs.getString("cam"+Integer.toString(j)+"_path", "");
-                if (path.contentEquals(devicepath)){
-                    devbox.setChecked(true);
-                    String nformat = prefs.getString("cam"+Integer.toString(j)+"_format", "");
-                    for (int k=0; k<formats.length; k++){
-                        if (formats[k].contentEquals(nformat)){
-                            format.setSelection(k);
-                            break;
-                        }
-                    }
-
-                    break;
                 }
             }
-
-            devpar.setText("-f v4l2 -input_format "+formats[format.getSelectedItemPosition()]+" -video_size "+resolutions[resolution.getSelectedItemPosition()]+" -i "+devLabel.getText()+" -c:v copy");
-
-            devbox.setOnCheckedChangeListener(new CheckBox.OnCheckedChangeListener(){
-                @Override
-                public void onCheckedChanged(CompoundButton cb, boolean b){
-                    updateParams();
-                }
-            });
         }
         updateParams();
     }
 
     private void updateParams(){
-        String params = "-copyts";
+        String params = "-regents";
         int selectedCams = 0;
         for (int i=0; i<deviceView.getChildCount(); i++){
             View v = deviceView.getChildAt(i);

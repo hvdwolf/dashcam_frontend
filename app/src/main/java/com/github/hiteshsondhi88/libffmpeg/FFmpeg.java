@@ -102,18 +102,26 @@ public class FFmpeg implements FFmpegInterface {
 
     @Override
     public String[][] getCameraOutputFormats(String path) throws FFmpegCommandAlreadyRunningException{
-        //ShellCommand shellCommand = new ShellCommand();
-        //CommandResult commandResult = shellCommand.runWaitFor(new String[] { FileUtils.getFFmpeg(context), "-hide_banner -f v4l2 -list_formats all -i "+path});
-        //if (commandResult.success){
+        ShellCommand shellCommand = new ShellCommand();
+        CommandResult commandResult = shellCommand.runWaitFor(new String[] { FileUtils.getFFmpeg(context), "-hide_banner", "-f", "v4l2", "-list_formats", "all", "-i", path});
+        if (true){//commandResult.success){
             String[][] retar;
-            String cresout = "[video4linux2,v4l2 @ 0x56101916ff40] Raw       :     yuyv422 :           YUYV 4:2:2 : 640x480 640x360 320x240 424x240 320x180\n" +
-                    "[video4linux2,v4l2 @ 0x56101916ff40] Compressed:       mjpeg :          Motion-JPEG : 640x480 640x360 320x240 424x240 320x180 848x480 960x540 1280x720\n" +
-                    "/dev/video0: Immediate exit requested\n";
+        //    String cresout = "[video4linux2,v4l2 @ 0x56101916ff40] Raw       :     yuyv422 :           YUYV 4:2:2 : 640x480 640x360 320x240 424x240 320x180\n" +
+        //            "[video4linux2,v4l2 @ 0x56101916ff40] Compressed:       mjpeg :          Motion-JPEG : 640x480 640x360 320x240 424x240 320x180 848x480 960x540 1280x720\n" +
+        //            "/dev/video0: Immediate exit requested\n";
 
-            String[] lines = cresout.split("\n");
-            retar = new String[lines.length-1][];
+            //String[] lines = cresout.split("\n");
+            Log.i("commandResult.output: "+ commandResult.output);
+            String[] lines = commandResult.output.split("\n");
+            int llen=0;
+            for (int i=0; i<lines.length; i++){
+                if (lines[i].contains("Raw") || lines[i].contains("Compressed")) llen++;
+            }
+            if (llen == 0) return null;
+            retar = new String[llen][];//lines.length][];
             int pos = 0;
             for (int i=0; i<lines.length; i++){
+                Log.i("commandResult.output line: "+ lines[i]);
                 if (lines[i].contains("Raw") || lines[i].contains("Compressed")){
                     String[] format = lines[i].split(": ");
 
@@ -129,9 +137,50 @@ public class FFmpeg implements FFmpegInterface {
                 }
             }
             return retar;
-        //}
-        //return null;
+        }
+        return null;
     }
+
+    /*@Override
+    public String[][] getCameraOutputFormats(String path) throws FFmpegCommandAlreadyRunningException{
+        ShellCommand shellCommand = new ShellCommand();
+        CommandResult commandResult = shellCommand.runWaitFor(new String[] { FileUtils.getFFmpeg(context), "-hide_banner", "-f", "v4l2", "-list_formats", "all", "-i", path});
+        if (true){//commandResult.success){
+            String[][] retar;
+                String cresout = "[video4linux2,v4l2 @ 0x56101916ff40] Raw       :     yuyv422 :           YUYV 4:2:2 : 640x480 640x360 320x240 424x240 320x180\n" +
+                        "[video4linux2,v4l2 @ 0x56101916ff40] Compressed:       mjpeg :          Motion-JPEG : 640x480 640x360 320x240 424x240 320x180 848x480 960x540 1280x720\n" +
+                        "/dev/video0: Immediate exit requested\n";
+            String[] lines = cresout.split("\n");
+
+            //Log.i("commandResult.output: "+ commandResult.output);
+            //String[] lines = commandResult.output.split("\n");
+            int llen=0;
+            for (int i=0; i<lines.length; i++){
+                if (lines[i].contains("Raw") || lines[i].contains("Compressed")) llen++;
+            }
+            if (llen == 0) return null;
+            retar = new String[llen][];//lines.length][];
+            int pos = 0;
+            for (int i=0; i<lines.length; i++){
+                Log.i("commandResult.output line: "+ lines[i]);
+                if (lines[i].contains("Raw") || lines[i].contains("Compressed")){
+                    String[] format = lines[i].split(": ");
+
+                    String[] resolutions = format[3].trim().split(" ");
+                    retar[pos] = new String[resolutions.length + 2];
+                    retar[pos][0] = format[0].contains("Compressed")?"Compressed":"Raw";
+                    retar[pos][1] = format[1].trim();
+
+                    for (int j=0; j<resolutions.length; j++){
+                        retar[pos][j+2] = resolutions[j];
+                    }
+                    pos++;
+                }
+            }
+            return retar;
+        }
+        return null;
+    }*/
 
     @Override
     public String getLibraryFFmpegVersion() {
