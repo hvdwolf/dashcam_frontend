@@ -11,7 +11,6 @@ public class StateReceiver extends BroadcastReceiver {
         // Using android.intent.action.USER_PRESENT
         // Hopefully this gets triggered on the china boxes.
 
-        //TODO: check the setting to make sure that dashcam is enabled.
         Log.d("Dashcam StateReceiver","Running onReceive");
         Intent service = new Intent(context, DashCamService.class);
         service.setAction(Constants.ACTION.STARTFOREGROUND_ACTION);

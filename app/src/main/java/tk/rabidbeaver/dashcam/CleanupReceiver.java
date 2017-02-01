@@ -3,7 +3,6 @@ package tk.rabidbeaver.dashcam;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.os.StatFs;
 import android.util.Log;
 
@@ -14,8 +13,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-
-import static android.content.Context.MODE_PRIVATE;
 
 // Note: This receiver is defined in the manifest using
 // android:process="tk.rabidbeaver.dashcam.cleanupreceiver"
@@ -31,7 +28,7 @@ public class CleanupReceiver extends BroadcastReceiver {
         // Read the directory into an ArrayList
         List<File> files = new ArrayList<>(Arrays.asList(path.listFiles(new FilenameFilter(){
             public boolean accept(File path, String name){
-                return (name.endsWith(".mkv") || name.endsWith(".nmea"));
+                return name.endsWith(".mkv");
             }
         })));
 
@@ -63,14 +60,12 @@ public class CleanupReceiver extends BroadcastReceiver {
             }
 
             if (lastModified > 0){
-                SharedPreferences prefs = context.getSharedPreferences("Settings", MODE_PRIVATE);
-                String rootpath = prefs.getString("path", "/mnt/external_sdio");
-                boolean internalLogging = prefs.getBoolean("loginternal", false);
-                Context dbc = context;
-                if (!internalLogging) dbc = new DatabaseContext(dbc);
-                String dbpath = (internalLogging?"":rootpath+"/")+"dashcam.db";
-                new BetterSQLiteOpenHelper(dbc, dbpath, null, Constants.VALUES.DATABASE_VERSION).getWritableDatabase()
-                        .execSQL("DELETE FROM log WHERE time <= datetime("+lastModified+", 'unixepoch', 'localtime')");
+                // Send the last modified time of the last deleted file (newest file) to the
+                // service, so it can clean old logs out of the database.
+                Intent service = new Intent(context, DashCamService.class);
+                service.setAction(Constants.ACTION.ACTION_CLEANDB);
+                service.putExtra("cleanup_threshold", lastModified);
+                context.startService(service);
             }
         }
     }

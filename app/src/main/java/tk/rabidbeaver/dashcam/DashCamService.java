@@ -6,9 +6,13 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.ContextWrapper;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.database.Cursor;
+import android.database.DatabaseErrorHandler;
 import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteOpenHelper;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.location.GpsStatus;
@@ -17,7 +21,10 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.location.LocationProvider;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Message;
+import android.os.Messenger;
 import android.os.SystemClock;
 import android.support.v7.app.NotificationCompat;
 import android.text.TextUtils;
@@ -30,6 +37,7 @@ import com.github.hiteshsondhi88.libffmpeg.LoadBinaryResponseHandler;
 import com.github.hiteshsondhi88.libffmpeg.exceptions.FFmpegCommandAlreadyRunningException;
 import com.github.hiteshsondhi88.libffmpeg.exceptions.FFmpegNotSupportedException;
 
+import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
@@ -44,7 +52,10 @@ public class DashCamService extends Service {
     private LocationManager locationManager;
     private LocationListener locationListener;
     private boolean verboseLogging = false;
-    private SQLiteDatabase db = null;
+    private static SQLiteDatabase db = null;
+    private SharedPreferences prefs;
+    private static Cursor logCursor;
+    final Messenger mLogMessenger = new Messenger(new LogHandler());
 
     @Override
     public void onCreate() {
@@ -66,6 +77,12 @@ public class DashCamService extends Service {
             } else if (intent.getAction().equals(Constants.ACTION.ACTION_RESTART)){
                 stopFFmpeg();
                 startFFmpeg();
+            } else if (intent.getAction().equals(Constants.ACTION.ACTION_CLEANDB)){
+                long lastModified = intent.getLongExtra("cleanup_threshold", 0);
+                if (lastModified > 0 && db != null){
+                    db.execSQL("DELETE FROM log WHERE time <= datetime("+lastModified+", 'unixepoch', 'localtime')");
+                    db.execSQL("DELETE FROM gps WHERE time <= datetime("+lastModified+", 'unixepoch', 'localtime')");
+                }
             }
         }
         return START_STICKY;
@@ -140,25 +157,37 @@ public class DashCamService extends Service {
         startForeground(Constants.NOTIFICATION_ID.FOREGROUND_SERVICE, notification.build());
         IS_SERVICE_RUNNING=true;
 
+        prefs = getSharedPreferences("Settings", MODE_MULTI_PROCESS);
+        String path=prefs.getString("path", "/mnt/external_sdio");
+        try {
+            boolean internalLogging = prefs.getBoolean("loginternal", false);
+            Context dbc = getApplicationContext();
+            if (!internalLogging) dbc = new DatabaseContext(dbc);
+            String dbpath = (internalLogging?"":path+"/")+"dashcam.db";
+            db = new SQLiteOpenHelper(dbc, dbpath, null, Constants.VALUES.DATABASE_VERSION){
+                public void onCreate(SQLiteDatabase db) {
+                    // note %f fractional (1/1000th) seconds
+                    db.execSQL("CREATE TABLE log (time TEXT PRIMARY KEY DEFAULT(STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')), type TEXT, value TEXT)");
+                    db.execSQL("CREATE TABLE gps (time TEXT PRIMARY KEY DEFAULT(STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')), value TEXT)");
+                }
+
+                public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+                    // This is still first version, so there isn't anything to upgrade to.
+                    // DO NOTHING.
+                }
+            }.getWritableDatabase();
+        } catch (Exception e){
+            e.printStackTrace();
+            db = null;
+        }
+
         //if set to auto-record, then do this:
         if (start) startFFmpeg();
     }
 
     private void startFFmpeg(){
         locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, locationListener);
-        SharedPreferences prefs = getSharedPreferences("Settings", MODE_MULTI_PROCESS);
         String path=prefs.getString("path", "/mnt/external_sdio");
-
-        try {
-            boolean internalLogging = prefs.getBoolean("loginternal", false);
-            Context dbc = getApplicationContext();
-            if (!internalLogging) dbc = new DatabaseContext(dbc);
-            String dbpath = (internalLogging?"":path+"/")+"dashcam.db";
-            db = new BetterSQLiteOpenHelper(dbc, dbpath, null, Constants.VALUES.DATABASE_VERSION).getWritableDatabase();
-        } catch (Exception e){
-            e.printStackTrace();
-            db = null;
-        }
 
         verboseLogging = prefs.getBoolean("verbose", false);
 
@@ -295,6 +324,13 @@ public class DashCamService extends Service {
         }
     }
 
+    public static void loadLog(){
+        if (db != null){
+            String[] columns = {"time", "type", "value"};
+            logCursor = db.query("log", columns, null, null, null, null, "time DESC");
+        } else logCursor = null;
+    }
+
     @Override
     public void onDestroy() {
         // This will probably be executed after ignition is off for a few minutes.
@@ -304,8 +340,80 @@ public class DashCamService extends Service {
         IS_SERVICE_RUNNING=false;
     }
 
+    private class DatabaseContext extends ContextWrapper {
+
+        public DatabaseContext(Context base) {
+            super(base);
+        }
+
+        @Override
+        public File getDatabasePath(String name)  {
+
+            File file = new File(name);
+
+            if (!file.getParentFile().exists()) {
+                file.getParentFile().mkdirs();
+            }
+
+            return file;
+        }
+
+        @Override
+        public SQLiteDatabase openOrCreateDatabase(String name, int mode, SQLiteDatabase.CursorFactory factory, DatabaseErrorHandler errorHandler) {
+            return openOrCreateDatabase(name, mode, factory);
+        }
+
+        @Override
+        public SQLiteDatabase openOrCreateDatabase(String name, int mode, SQLiteDatabase.CursorFactory factory) {
+            return SQLiteDatabase.openOrCreateDatabase(getDatabasePath(name), null);
+        }
+    }
+
     @Override
     public IBinder onBind(Intent intent) {
-        return null;
+        return mLogMessenger.getBinder();
+    }
+
+    static class LogHandler extends Handler {
+        @Override
+        public void handleMessage(Message msg) {
+            if (msg.what == Constants.MESSAGES.LOAD_DATABASE) loadLog();
+            else if (msg.what == Constants.MESSAGES.DATA_LENGTH){
+                Message m = new Message();
+                Bundle b = new Bundle();
+                if (logCursor == null) loadLog();
+                try {
+                    b.putInt("length", logCursor.getCount());
+                } catch (Exception e){
+                    b.putInt("length", 0);
+                }
+                m.setData(b);
+                m.what = msg.what;
+                try {
+                    msg.replyTo.send(m);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            } else if (msg.what == Constants.MESSAGES.CLEAR_LOG){
+                if (db != null){
+                    db.execSQL("DELETE FROM log");
+                }
+            } else {
+                logCursor.moveToPosition(msg.what);
+
+                Message m = new Message();
+                Bundle b = new Bundle();
+                b.putString("time", logCursor.getString(0));
+                b.putString("type", logCursor.getString(1));
+                b.putString("value", logCursor.getString(2));
+                m.setData(b);
+                m.what = msg.what;
+                try {
+                    msg.replyTo.send(m);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
     }
 }

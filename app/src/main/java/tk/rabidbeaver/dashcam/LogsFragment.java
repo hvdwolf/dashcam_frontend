@@ -1,9 +1,6 @@
 package tk.rabidbeaver.dashcam;
 
-import android.content.Context;
 import android.content.DialogInterface;
-import android.content.SharedPreferences;
-import android.database.Cursor;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
@@ -17,13 +14,10 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
-import static android.content.Context.MODE_PRIVATE;
-
 public class LogsFragment extends Fragment {
     private View rootView;
     private SwipeRefreshLayout pullrefresher;
-    private CursorRecyclerAdapter adapter;
-    private Cursor cursor;
+    private MessengerRecyclerAdapter adapter;
     private TextView.OnLongClickListener lcl;
 
     @Override
@@ -40,8 +34,8 @@ public class LogsFragment extends Fragment {
         pullrefresher.setOnRefreshListener(new SwipeRefreshLayout.OnRefreshListener() {
             @Override
             public void onRefresh() {
-                refresh();
-                adapter.changeCursor(cursor);
+                adapter.refreshSource();
+                if (pullrefresher != null) pullrefresher.setRefreshing(false);
             }
         });
         RecyclerView logView = (RecyclerView) rootView.findViewById(R.id.logview);
@@ -55,17 +49,9 @@ public class LogsFragment extends Fragment {
                         .setIcon(android.R.drawable.ic_dialog_alert)
                         .setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
                             public void onClick(DialogInterface dialog, int whichButton) {
-                                SharedPreferences prefs = getActivity().getSharedPreferences("Settings", MODE_PRIVATE);
-                                String rootpath = prefs.getString("path", "/mnt/external_sdio");
-                                boolean internalLogging = prefs.getBoolean("loginternal", false);
-                                Context dbc = getContext();
-                                if (!internalLogging) dbc = new DatabaseContext(dbc);
-                                String dbpath = (internalLogging?"":rootpath+"/")+"dashcam.db";
-                                new BetterSQLiteOpenHelper(dbc, dbpath, null, Constants.VALUES.DATABASE_VERSION).getWritableDatabase()
-                                        .execSQL("DELETE FROM log");
-
-                                refresh();
-                                adapter.changeCursor(cursor);
+                                adapter.clearLog();
+                                adapter.refreshSource();
+                                if (pullrefresher != null) pullrefresher.setRefreshing(false);
                             }})
                         .setNegativeButton(android.R.string.no, null)
                         .show();
@@ -78,9 +64,10 @@ public class LogsFragment extends Fragment {
         llm.setOrientation(LinearLayoutManager.VERTICAL);
         logView.setLayoutManager(llm);
 
-        refresh();
+        if (pullrefresher != null) pullrefresher.setRefreshing(false);
 
-        adapter = new CursorRecyclerAdapter(cursor){
+        adapter = new MessengerRecyclerAdapter((MessengerInterface)getActivity()){
+
             public LogRowViewHolder onCreateViewHolder(ViewGroup viewGroup, int viewType) {
                 TextView view = new TextView(getContext());
                 view.setLayoutParams(new RecyclerView.LayoutParams(RecyclerView.LayoutParams.MATCH_PARENT, RecyclerView.LayoutParams.WRAP_CONTENT));
@@ -88,10 +75,11 @@ public class LogsFragment extends Fragment {
                 return new LogRowViewHolder(view);
             }
 
-            public void onBindViewHolder(RecyclerView.ViewHolder viewHolder, Cursor c) {
-                String time = c.getString(0);
-                String type = c.getString(1);
-                String value = c.getString(2);
+            public void onBindViewHolder(RecyclerView.ViewHolder viewHolder, MessengerInterface m, int position){
+                LogRow row = m.getItem(position);
+                String time = row.time;
+                String type = row.type;
+                String value = row.value;
 
                 ((LogRowViewHolder)viewHolder).data.setText(time+": "+type+": "+value);
             }
@@ -104,28 +92,9 @@ public class LogsFragment extends Fragment {
         super.setUserVisibleHint(visible);
         Log.d("LogsFragment", "setUserVisibleHint: "+Boolean.toString(visible));
         if (visible){
-            refresh();
-            adapter.changeCursor(cursor);
+            adapter.refreshSource();
+            if (pullrefresher != null) pullrefresher.setRefreshing(false);
         }
-    }
-
-    private void refresh(){
-        SharedPreferences prefs = this.getActivity().getSharedPreferences("Settings", MODE_PRIVATE);
-        String rootpath = prefs.getString("path", "/mnt/external_sdio");
-        boolean internalLogging = prefs.getBoolean("loginternal", false);
-        Context dbc = getContext();
-        if (!internalLogging) dbc = new DatabaseContext(dbc);
-        String dbpath = (internalLogging?"":rootpath+"/")+"dashcam.db";
-        try {
-            String[] columns = {"time", "type", "value"};
-            cursor = new BetterSQLiteOpenHelper(dbc, dbpath, null, Constants.VALUES.DATABASE_VERSION).getWritableDatabase()
-                .query("log", columns, null, null, null, null, "time DESC");
-        } catch (Exception e){
-            e.printStackTrace();
-            cursor = null;
-        }
-
-        if (pullrefresher != null) pullrefresher.setRefreshing(false);
     }
 
     final class LogRowViewHolder extends RecyclerView.ViewHolder {

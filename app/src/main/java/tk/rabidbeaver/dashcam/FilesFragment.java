@@ -111,15 +111,15 @@ public class FilesFragment extends Fragment {
             // Sort the ArrayList according to lastModified time
             Collections.sort(files, new Comparator<File>() {
                 public int compare(File f1, File f2) {
-                    if (f1.lastModified() < f2.lastModified()) return -1;
-                    else if (f1.lastModified() > f2.lastModified()) return 1;
+                    if (f1.lastModified() > f2.lastModified()) return -1;
+                    else if (f1.lastModified() < f2.lastModified()) return 1;
                     return 0;
                 }
             });
             Collections.sort(pfiles, new Comparator<File>() {
                 public int compare(File f1, File f2) {
-                    if (f1.lastModified() < f2.lastModified()) return -1;
-                    else if (f1.lastModified() > f2.lastModified()) return 1;
+                    if (f1.lastModified() > f2.lastModified()) return -1;
+                    else if (f1.lastModified() < f2.lastModified()) return 1;
                     return 0;
                 }
             });
@@ -224,8 +224,12 @@ public class FilesFragment extends Fragment {
         public void onBindViewHolder(ListItemViewHolder viewHolder, int position) {
             File f = data.get(position);
             viewHolder.filename.setText(String.valueOf(f.getName()));
-            viewHolder.protbox_disabled = true;
-            viewHolder.protbox.setChecked(f.getAbsolutePath().contains("/protected/"));
+            boolean shouldBeChecked = f.getAbsolutePath().contains("/protected/");
+            boolean isChecked = viewHolder.protbox.isChecked();
+            if (shouldBeChecked != isChecked) {
+                viewHolder.protbox_disabled = true;
+                viewHolder.protbox.setChecked(shouldBeChecked);
+            }
         }
 
         @Override
