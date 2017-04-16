@@ -62,6 +62,7 @@ public class DashCam extends AppCompatActivity implements MessengerInterface {
             unbindService(mConnection);
             mBound=false;
         }
+        super.onStop();
     }
 
     public class SectionsPagerAdapter extends FragmentPagerAdapter {

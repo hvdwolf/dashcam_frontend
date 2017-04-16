@@ -39,6 +39,7 @@ import com.github.hiteshsondhi88.libffmpeg.exceptions.FFmpegNotSupportedExceptio
 
 import java.io.File;
 import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.Date;
 
 public class DashCamService extends Service {
@@ -56,6 +57,8 @@ public class DashCamService extends Service {
     private SharedPreferences prefs;
     private static Cursor logCursor;
     final Messenger mLogMessenger = new Messenger(new LogHandler());
+    private boolean autostarter = false;
+    private boolean stopped = false;
 
     @Override
     public void onCreate() {
@@ -67,15 +70,19 @@ public class DashCamService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        if (getSharedPreferences("Settings", MODE_MULTI_PROCESS).getBoolean("autostart", true)) autostarter = true;
         if (!IS_SERVICE_RUNNING) {
-            showNotification(getSharedPreferences("Settings", MODE_MULTI_PROCESS).getBoolean("autostart", true));
+            showNotification(autostarter);
         } else {
-            if (intent.getAction().equals(Constants.ACTION.ACTION_RECORD)) {
+            if (intent.getAction().equals(Constants.ACTION.ACTION_RECORD) || (intent.getAction().equals(Constants.ACTION.STARTFOREGROUND_ACTION) && autostarter)) {
+                stopped=false;
                 startFFmpeg();
             } else if (intent.getAction().equals(Constants.ACTION.ACTION_STOP)) {
+                stopped=true;
                 stopFFmpeg();
             } else if (intent.getAction().equals(Constants.ACTION.ACTION_RESTART)){
                 stopFFmpeg();
+                stopped=false;
                 startFFmpeg();
             } else if (intent.getAction().equals(Constants.ACTION.ACTION_CLEANDB)){
                 long lastModified = intent.getLongExtra("cleanup_threshold", 0);
@@ -134,6 +141,15 @@ public class DashCamService extends Service {
             public void onNmeaReceived(long timestamp, String nmea){
                 writeGpsLog(nmea);
                 Log.d("DashCam GPS", new SimpleDateFormat("yyyy.MM.dd HH:mm:ss z").format(new Date(timestamp))+": NMEA: "+nmea);
+                //TODO: The following actually runs startFFmpeg() every about 1 second.
+                // seems that ffmpeg.isFFmpegCommandRunning() is returning incorrect values
+                // AND, this onNmeaReceived gets triggered more than every update, rather it gets triffered
+                // about 15 times per second. The former could be a side-effect of the latter.
+                // TODO: if (timestamp%15 == 0)? -- timestamp is in millisecond.
+
+                if (!stopped && autostarter && (((timestamp / 1000) % 15) == 0) && !ffmpeg.isFFmpegCommandRunning()){
+                    startFFmpeg();
+                }
             }
         });
     }
