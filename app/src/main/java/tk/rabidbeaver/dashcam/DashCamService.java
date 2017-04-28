@@ -348,7 +348,7 @@ public class DashCamService extends Service {
     public static void loadLog(){
         if (db != null){
             String[] columns = {"time", "type", "value"};
-            logCursor = db.query("log", columns, null, null, null, null, "time DESC");
+            logCursor = db.query("log", columns, null, null, null, null, null);
         } else logCursor = null;
     }
 
@@ -420,7 +420,7 @@ public class DashCamService extends Service {
                     db.execSQL("DELETE FROM log");
                 }
             } else {
-                logCursor.moveToPosition(msg.what);
+                logCursor.moveToPosition(logCursor.getCount()-1-msg.what);
 
                 Message m = new Message();
                 Bundle b = new Bundle();
