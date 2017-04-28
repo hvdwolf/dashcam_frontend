@@ -1,4 +1,4 @@
-package com.github.hiteshsondhi88.libffmpeg;
+package tk.rabidbeaver.libffmpeg;
 
 import android.text.TextUtils;
 
@@ -11,10 +11,6 @@ enum CpuArch {
 
     CpuArch(String sha1) {
         this.sha1 = sha1;
-    }
-
-    String getSha1(){
-        return sha1;
     }
 
     static CpuArch fromString(String sha1) {

@@ -76,12 +76,19 @@ public class LogsFragment extends Fragment {
             }
 
             public void onBindViewHolder(RecyclerView.ViewHolder viewHolder, MessengerInterface m, int position){
-                LogRow row = m.getItem(position);
+                //TODO: I believe that the loading delay is due to m.getItem() being synchronized.
+                //  The problem is a compound problem; 1) The function itself has a synchronized block,
+                //  (2) the IPC adds another delay. Rather than setting all the data here, we should send
+                //  a reference to the viewholder over to getItem, have getItem return immediately and fill
+                //  in the viewholder itself when the data becomes available.
+
+                m.getItem(position, ((LogRowViewHolder)viewHolder).data);
+                /*LogRow row = m.getItem(position);
                 String time = row.time;
                 String type = row.type;
                 String value = row.value;
 
-                ((LogRowViewHolder)viewHolder).data.setText(time+": "+type+": "+value);
+                ((LogRowViewHolder)viewHolder).data.setText(time+": "+type+": "+value);*/
             }
         };
         logView.setAdapter(adapter);
@@ -97,7 +104,7 @@ public class LogsFragment extends Fragment {
         }
     }
 
-    final class LogRowViewHolder extends RecyclerView.ViewHolder {
+    private final class LogRowViewHolder extends RecyclerView.ViewHolder {
         TextView data;
 
         LogRowViewHolder(View itemView) {

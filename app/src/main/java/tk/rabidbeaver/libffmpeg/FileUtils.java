@@ -1,4 +1,4 @@
-package com.github.hiteshsondhi88.libffmpeg;
+package tk.rabidbeaver.libffmpeg;
 
 import android.content.Context;
 
@@ -41,12 +41,12 @@ class FileUtils {
 			
 			return true;
 		} catch (IOException e) {
-			Log.e("issue in coping binary from assets to data. ", e);
+            e.printStackTrace();
 		}
         return false;
 	}
 
-	static File getFilesDirectory(Context context) {
+	private static File getFilesDirectory(Context context) {
 		// creates files directory under data/data/package name
         return context.getFilesDir();
 	}
@@ -72,14 +72,14 @@ class FileUtils {
             is = new BufferedInputStream(new FileInputStream(file));
             return SHA1(is);
         } catch (IOException e) {
-            Log.e(e);
+            e.printStackTrace();
         } finally {
             Util.close(is);
         }
         return null;
     }
 
-    static String SHA1(InputStream is) {
+    private static String SHA1(InputStream is) {
         try {
             MessageDigest messageDigest = MessageDigest.getInstance("SHA1");
             final byte[] buffer = new byte[DEFAULT_BUFFER_SIZE];
@@ -93,10 +93,8 @@ class FileUtils {
                 formatter.format("%02x", b);
             }
             return formatter.toString();
-        } catch (NoSuchAlgorithmException e) {
-            Log.e(e);
-        } catch (IOException e) {
-            Log.e(e);
+        } catch (NoSuchAlgorithmException | IOException e) {
+            e.printStackTrace();
         } finally {
             Util.close(is);
         }

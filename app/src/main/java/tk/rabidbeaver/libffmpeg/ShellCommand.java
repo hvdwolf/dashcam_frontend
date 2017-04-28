@@ -1,6 +1,9 @@
-package com.github.hiteshsondhi88.libffmpeg;
+package tk.rabidbeaver.libffmpeg;
+
+import android.util.Log;
 
 import java.io.IOException;
+import java.util.Arrays;
 
 class ShellCommand {
 
@@ -9,7 +12,7 @@ class ShellCommand {
         try {
             process = Runtime.getRuntime().exec(commandString);
         } catch (IOException e) {
-            Log.e("Exception while trying to run: " + commandString, e);
+            Log.e("FFMPEG", "Exception while trying to run: " + Arrays.toString(commandString) + e);
         }
         return process;
     }
@@ -30,7 +33,7 @@ class ShellCommand {
                 }
             }
         } catch (InterruptedException e) {
-            Log.e("Interrupt exception", e);
+            e.printStackTrace();
         } finally {
             Util.destroyProcess(process);
         }

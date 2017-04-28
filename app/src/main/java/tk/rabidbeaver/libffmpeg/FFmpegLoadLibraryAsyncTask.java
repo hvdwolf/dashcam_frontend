@@ -1,7 +1,8 @@
-package com.github.hiteshsondhi88.libffmpeg;
+package tk.rabidbeaver.libffmpeg;
 
 import android.content.Context;
 import android.os.AsyncTask;
+import android.util.Log;
 
 import java.io.File;
 
@@ -31,12 +32,12 @@ class FFmpegLoadLibraryAsyncTask extends AsyncTask<Void, Void, Boolean> {
             // make file executable
             if (isFileCopied) {
                 if(!ffmpegFile.canExecute()) {
-                    Log.d("FFmpeg is not executable, trying to make it executable ...");
+                    Log.d("FFMPEG", "FFmpeg is not executable, trying to make it executable ...");
                     if (ffmpegFile.setExecutable(true)) {
                         return true;
                     }
                 } else {
-                    Log.d("FFmpeg is executable");
+                    Log.d("FFMPEG", "FFmpeg is executable");
                     return true;
                 }
             }

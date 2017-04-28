@@ -1,23 +1,23 @@
-package com.github.hiteshsondhi88.libffmpeg;
+package tk.rabidbeaver.libffmpeg;
 
-public interface FFmpegExecuteResponseHandler extends ResponseHandler {
+interface FFmpegExecuteResponseHandler extends ResponseHandler {
 
     /**
      * on Success
      * @param message complete output of the FFmpeg command
      */
-    public void onSuccess(String message);
+    void onSuccess(String message);
 
     /**
      * on Progress
      * @param message current output of FFmpeg command
      */
-    public void onProgress(String message);
+    void onProgress(String message);
 
     /**
      * on Failure
      * @param message complete output of the FFmpeg command
      */
-    public void onFailure(String message);
+    void onFailure(String message);
 
 }

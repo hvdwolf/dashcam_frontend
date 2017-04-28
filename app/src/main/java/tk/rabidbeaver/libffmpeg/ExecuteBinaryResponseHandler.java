@@ -1,4 +1,4 @@
-package com.github.hiteshsondhi88.libffmpeg;
+package tk.rabidbeaver.libffmpeg;
 
 public class ExecuteBinaryResponseHandler implements FFmpegExecuteResponseHandler {
 

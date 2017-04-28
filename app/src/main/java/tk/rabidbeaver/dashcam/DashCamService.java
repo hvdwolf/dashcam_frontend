@@ -31,16 +31,16 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.widget.Toast;
 
-import com.github.hiteshsondhi88.libffmpeg.ExecuteBinaryResponseHandler;
-import com.github.hiteshsondhi88.libffmpeg.FFmpeg;
-import com.github.hiteshsondhi88.libffmpeg.LoadBinaryResponseHandler;
-import com.github.hiteshsondhi88.libffmpeg.exceptions.FFmpegCommandAlreadyRunningException;
-import com.github.hiteshsondhi88.libffmpeg.exceptions.FFmpegNotSupportedException;
+import tk.rabidbeaver.libffmpeg.ExecuteBinaryResponseHandler;
+import tk.rabidbeaver.libffmpeg.FFmpeg;
+import tk.rabidbeaver.libffmpeg.LoadBinaryResponseHandler;
+import tk.rabidbeaver.libffmpeg.exceptions.FFmpegCommandAlreadyRunningException;
+import tk.rabidbeaver.libffmpeg.exceptions.FFmpegNotSupportedException;
 
 import java.io.File;
 import java.text.SimpleDateFormat;
-import java.util.Calendar;
 import java.util.Date;
+import java.util.Locale;
 
 public class DashCamService extends Service {
 
@@ -53,8 +53,7 @@ public class DashCamService extends Service {
     private LocationManager locationManager;
     private LocationListener locationListener;
     private boolean verboseLogging = false;
-    private static SQLiteDatabase db = null;
-    private SharedPreferences prefs;
+    protected static SQLiteDatabase db = null;
     private static Cursor logCursor;
     final Messenger mLogMessenger = new Messenger(new LogHandler());
     private boolean autostarter = false;
@@ -63,14 +62,14 @@ public class DashCamService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        ffmpeg = FFmpeg.getInstance(DashCamService.this);
+        ffmpeg = new FFmpeg(DashCamService.this);
         loadFFMpegBinary();
         setupGpsListeners();
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (getSharedPreferences("Settings", MODE_MULTI_PROCESS).getBoolean("autostart", true)) autostarter = true;
+        if (getSharedPreferences("Settings", MODE_PRIVATE).getBoolean("autostart", true)) autostarter = true;
         if (!IS_SERVICE_RUNNING) {
             showNotification(autostarter);
         } else {
@@ -95,6 +94,7 @@ public class DashCamService extends Service {
         return START_STICKY;
     }
 
+    @SuppressWarnings("deprecation")
     private void setupGpsListeners(){
         locationListener = new LocationListener() {
 
@@ -102,7 +102,7 @@ public class DashCamService extends Service {
             public void onLocationChanged(Location location) {
                 // Called when a new location is found by the network location provider.
                 //makeUseOfNewLocation(location);
-                Log.d("DashCam GPS", new SimpleDateFormat("yyyy.MM.dd HH:mm:ss z").format(new Date(location.getTime())) + ": " + location.getLatitude() + ", " + location.getLongitude() + ", accuracy: (" + location.getAccuracy() + " m), altitude: (" + location.getAltitude() + " m over WGS 84), bearing: (" + location.getBearing() + " deg), speed: (" + location.getSpeed() + " m/s), satellites: (" + location.getExtras().getInt("satellites") + ")");
+                Log.d("DashCam GPS", new SimpleDateFormat("yyyy.MM.dd HH:mm:ss z", Locale.US).format(new Date(location.getTime())) + ": " + location.getLatitude() + ", " + location.getLongitude() + ", accuracy: (" + location.getAccuracy() + " m), altitude: (" + location.getAltitude() + " m over WGS 84), bearing: (" + location.getBearing() + " deg), speed: (" + location.getSpeed() + " m/s), satellites: (" + location.getExtras().getInt("satellites") + ")");
             }
 
             public void onStatusChanged(String provider, int status, Bundle extras) {
@@ -136,19 +136,24 @@ public class DashCamService extends Service {
                 });*/
 
         // Raw NMEA stream (this is good for location logging)
+        // NOTE: the following is deprecated, but its replacement isn't added until API 24 -- we target API 22.
         locationManager.addNmeaListener(new GpsStatus.NmeaListener(){
             @Override
             public void onNmeaReceived(long timestamp, String nmea){
                 writeGpsLog(nmea);
-                Log.d("DashCam GPS", new SimpleDateFormat("yyyy.MM.dd HH:mm:ss z").format(new Date(timestamp))+": NMEA: "+nmea);
-                //TODO: The following actually runs startFFmpeg() every about 1 second.
-                // seems that ffmpeg.isFFmpegCommandRunning() is returning incorrect values
-                // AND, this onNmeaReceived gets triggered more than every update, rather it gets triffered
-                // about 15 times per second. The former could be a side-effect of the latter.
-                // TODO: if (timestamp%15 == 0)? -- timestamp is in millisecond.
+                Log.d("DashCam GPS", new SimpleDateFormat("yyyy.MM.dd HH:mm:ss z", Locale.US).format(new Date(timestamp))+": NMEA: "+nmea);
 
-                if (!stopped && autostarter && (((timestamp / 1000) % 15) == 0) && !ffmpeg.isFFmpegCommandRunning()){
-                    startFFmpeg();
+                // This HACK should restart ffmpeg if it fails to start when it is called too early. It also
+                // should fix the notification icon so that it is consistent with the actual state of recording.
+                if ((((timestamp / 1000) % 15) == 0)) {
+                    if (!stopped && autostarter && !ffmpeg.isFFmpegCommandRunning()) {
+                        startFFmpeg();
+                    }
+
+                    // Sometimes the notification goes the wrong way. This should fix that.
+                    //if ((ffmpeg.isFFmpegCommandRunning() && !NOTIFICATION_RECORDING) || (!ffmpeg.isFFmpegCommandRunning() && NOTIFICATION_RECORDING)) {
+                    //    updateNotification(ffmpeg.isFFmpegCommandRunning());
+                    //}
                 }
             }
         });
@@ -173,7 +178,14 @@ public class DashCamService extends Service {
         startForeground(Constants.NOTIFICATION_ID.FOREGROUND_SERVICE, notification.build());
         IS_SERVICE_RUNNING=true;
 
-        prefs = getSharedPreferences("Settings", MODE_MULTI_PROCESS);
+        //if set to auto-record, then do this:
+        if (start) startFFmpeg();
+    }
+
+    private void startFFmpeg(){
+        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, locationListener);
+
+        SharedPreferences prefs = getSharedPreferences("Settings", MODE_PRIVATE);
         String path=prefs.getString("path", "/mnt/external_sdio");
         try {
             boolean internalLogging = prefs.getBoolean("loginternal", false);
@@ -196,14 +208,6 @@ public class DashCamService extends Service {
             e.printStackTrace();
             db = null;
         }
-
-        //if set to auto-record, then do this:
-        if (start) startFFmpeg();
-    }
-
-    private void startFFmpeg(){
-        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, locationListener);
-        String path=prefs.getString("path", "/mnt/external_sdio");
 
         verboseLogging = prefs.getBoolean("verbose", false);
 
@@ -254,6 +258,7 @@ public class DashCamService extends Service {
             PendingIntent pRecordIntent = PendingIntent.getService(this, 0, recordIntent, 0);
             notification.addAction(android.R.drawable.ic_media_play, "Record", pRecordIntent);
         }
+
         notification.setContentIntent(pi);
         ((NotificationManager) getSystemService(NOTIFICATION_SERVICE)).notify(Constants.NOTIFICATION_ID.FOREGROUND_SERVICE, notification.build());
 
@@ -279,7 +284,7 @@ public class DashCamService extends Service {
         }
     }
 
-    private void execFFmpegBinary(final String[] command) {
+    private synchronized void execFFmpegBinary(final String[] command) {
         try {
             ffmpeg.execute(command, new ExecuteBinaryResponseHandler() {
                 @Override
@@ -367,8 +372,8 @@ public class DashCamService extends Service {
 
             File file = new File(name);
 
-            if (!file.getParentFile().exists()) {
-                file.getParentFile().mkdirs();
+            if (!file.getParentFile().exists() && file.getParentFile().mkdirs()) {
+                return file;
             }
 
             return file;
@@ -390,7 +395,7 @@ public class DashCamService extends Service {
         return mLogMessenger.getBinder();
     }
 
-    static class LogHandler extends Handler {
+    private static class LogHandler extends Handler {
         @Override
         public void handleMessage(Message msg) {
             if (msg.what == Constants.MESSAGES.LOAD_DATABASE) loadLog();
@@ -422,6 +427,7 @@ public class DashCamService extends Service {
                 b.putString("time", logCursor.getString(0));
                 b.putString("type", logCursor.getString(1));
                 b.putString("value", logCursor.getString(2));
+                b.putInt("position", msg.what);
                 m.setData(b);
                 m.what = msg.what;
                 try {

@@ -16,8 +16,6 @@ public class StateReceiver extends BroadcastReceiver {
         service.setAction(Constants.ACTION.STARTFOREGROUND_ACTION);
         context.startService(service);
 
-        //TODO: BUG! Getting a no such file error on /dev/video5, which means that ffmpeg
-        //TODO: is starting before the USB device is registered properly. Add a delay!
         /*Bundle bundle = intent.getExtras();
         if (bundle != null) {
             Set<String> keys = bundle.keySet();

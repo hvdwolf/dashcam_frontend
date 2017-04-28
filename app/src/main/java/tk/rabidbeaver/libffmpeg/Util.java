@@ -1,7 +1,5 @@
-package com.github.hiteshsondhi88.libffmpeg;
+package tk.rabidbeaver.libffmpeg;
 
-import android.content.Context;
-import android.content.pm.ApplicationInfo;
 import android.os.AsyncTask;
 
 import java.io.BufferedReader;
@@ -11,10 +9,6 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 
 class Util {
-
-    static boolean isDebug(Context context) {
-        return (0 != (context.getApplicationContext().getApplicationInfo().flags &= ApplicationInfo.FLAG_DEBUGGABLE));
-    }
 
     static void close(InputStream inputStream) {
         if (inputStream != null) {
@@ -43,11 +37,12 @@ class Util {
             String str;
             StringBuilder sb = new StringBuilder();
             while ((str = r.readLine()) != null) {
-                sb.append(str+"\n");
+                sb.append(str);
+                sb.append("\n");
             }
             return sb.toString();
         } catch (IOException e) {
-            Log.e("error converting input stream to string", e);
+            e.printStackTrace();
         }
         return null;
     }

@@ -18,12 +18,18 @@ import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentPagerAdapter;
 import android.support.v4.view.ViewPager;
 import android.os.Bundle;
+import android.widget.TextView;
+
+import java.util.Hashtable;
 
 public class DashCam extends AppCompatActivity implements MessengerInterface {
+    static DashCam dc;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        dc = DashCam.this;
 
         setContentView(R.layout.activity_dash_cam);
 
@@ -65,7 +71,7 @@ public class DashCam extends AppCompatActivity implements MessengerInterface {
         super.onStop();
     }
 
-    public class SectionsPagerAdapter extends FragmentPagerAdapter {
+    private class SectionsPagerAdapter extends FragmentPagerAdapter {
 
         SectionsPagerAdapter(FragmentManager fm) {
             super(fm);
@@ -109,9 +115,9 @@ public class DashCam extends AppCompatActivity implements MessengerInterface {
     private static boolean mBound = false;
     private static int dataSize = 0;
     private static final Object lock = new Object();
-    private static LogRow dataSet = null;
+    private static Hashtable<Integer, TextView> store = new Hashtable<>();
 
-    static class IncomingHandler extends Handler {
+    private static class IncomingHandler extends Handler {
 
         IncomingHandler(HandlerThread thr) {
             super(thr.getLooper());
@@ -126,10 +132,14 @@ public class DashCam extends AppCompatActivity implements MessengerInterface {
                 }
             } else if (msg.what >= 0){
                 Bundle b = msg.getData();
-                dataSet = new LogRow(b.getString("time"), b.getString("type"), b.getString("value"));
-                synchronized(lock){
-                    lock.notify();
-                }
+                final TextView dest = store.get(b.getInt("position"));
+                final String line = b.getString("time")+": "+b.getString("type")+": "+b.getString("value");
+
+                dc.runOnUiThread(new Runnable(){
+                    public void run(){
+                        dest.setText(line);
+                    }
+                });
             }
         }
     }
@@ -145,9 +155,9 @@ public class DashCam extends AppCompatActivity implements MessengerInterface {
             // unexpectedly disconnected -- that is, its process crashed.
             mServiceMessenger = null;
             mBound = false;
-            synchronized(lock){
+            //synchronized(lock){
                 lock.notify();
-            }
+            //}
         }
     };
 
@@ -182,21 +192,19 @@ public class DashCam extends AppCompatActivity implements MessengerInterface {
         return length;
     }
 
-    public LogRow getItem(int position){
+    public void getItem(int position, TextView dest){
         if (mBound) {
             Message msg = Message.obtain(null, position, 0, 0);
             msg.replyTo = mClientMessenger;
             try {
-                synchronized (lock) {
-                    mServiceMessenger.send(msg);
-                    lock.wait();
-                }
-                return dataSet;
-            } catch (RemoteException | InterruptedException e) {
+                store.put(position, dest);
+                mServiceMessenger.send(msg);
+            } catch (RemoteException e) {
                 e.printStackTrace();
             }
+        } else {
+            dest.setText("");
         }
-        return null;
     }
 
     public void clearLog(){

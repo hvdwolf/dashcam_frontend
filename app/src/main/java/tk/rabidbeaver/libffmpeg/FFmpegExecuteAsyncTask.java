@@ -1,6 +1,7 @@
-package com.github.hiteshsondhi88.libffmpeg;
+package tk.rabidbeaver.libffmpeg;
 
 import android.os.AsyncTask;
+import android.util.Log;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -40,14 +41,14 @@ class FFmpegExecuteAsyncTask extends AsyncTask<Void, String, CommandResult> {
             if (process == null) {
                 return CommandResult.getDummyFailureResponse();
             }
-            Log.d("Running publishing updates method");
+            Log.d("FFMPEG", "Running publishing updates method");
             checkAndUpdateProcess();
             return CommandResult.getOutputFromProcess(process);
         } catch (TimeoutException e) {
-            Log.e("FFmpeg timed out", e);
+            Log.e("FFMPEG", "FFmpeg timed out"+e);
             return new CommandResult(false, e.getMessage());
         } catch (Exception e) {
-            Log.e("Error running FFmpeg", e);
+            Log.e("FFMPEG", "Error running FFmpeg"+e);
         } finally {
             Util.destroyProcess(process);
         }
@@ -76,11 +77,6 @@ class FFmpegExecuteAsyncTask extends AsyncTask<Void, String, CommandResult> {
 
     private void checkAndUpdateProcess() throws TimeoutException, InterruptedException {
         while (!Util.isProcessCompleted(process)) {
-            // checking if process is completed
-            if (Util.isProcessCompleted(process)) {
-                return;
-            }
-
             // Handling timeout
             if (timeout != Long.MAX_VALUE && System.currentTimeMillis() > startTime + timeout) {
                 throw new TimeoutException("FFmpeg timed out");
@@ -107,9 +103,4 @@ class FFmpegExecuteAsyncTask extends AsyncTask<Void, String, CommandResult> {
             }
         }
     }
-
-    boolean isProcessCompleted() {
-        return Util.isProcessCompleted(process);
-    }
-
 }

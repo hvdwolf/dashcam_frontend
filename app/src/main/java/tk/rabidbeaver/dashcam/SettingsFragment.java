@@ -21,8 +21,8 @@ import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
 
-import com.github.hiteshsondhi88.libffmpeg.FFmpeg;
-import com.github.hiteshsondhi88.libffmpeg.LoadBinaryResponseHandler;
+import tk.rabidbeaver.libffmpeg.FFmpeg;
+import tk.rabidbeaver.libffmpeg.LoadBinaryResponseHandler;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -72,7 +72,7 @@ public class SettingsFragment extends Fragment {
             }
         });
 
-        ffmpeg = FFmpeg.getInstance(this.getContext());
+        ffmpeg = new FFmpeg(this.getContext());//FFmpeg.getInstance(this.getContext());
         try {
             ffmpeg.loadBinary(new LoadBinaryResponseHandler() {
                 @Override
@@ -281,8 +281,11 @@ public class SettingsFragment extends Fragment {
                         format.setLabelFor(cameraOPList.size()); // abuse the "labelFor" attribute to store array index.
 
                         final String[] resolutions = new String[cameraOP[0].length - 2];
-                        for (int j = 0; j < cameraOP[0].length - 2; j++)
-                            resolutions[j] = cameraOP[0][j + 2];
+
+                        System.arraycopy(cameraOP[0], 2, resolutions, 0, cameraOP[0].length - 2);
+
+                        /*for (int j = 0; j < cameraOP[0].length - 2; j++)
+                            resolutions[j] = cameraOP[0][j + 2];*/
 
                         cameraOPList.add(cameraOP);
 
@@ -297,8 +300,9 @@ public class SettingsFragment extends Fragment {
                                 String[][] cameraOP = cameraOPList.get(parent.getLabelFor());
                                 if (cameraOP != null) {
                                     String[] resolutions = new String[cameraOP[pos].length - 2];
-                                    for (int j = 0; j < cameraOP[pos].length - 2; j++)
-                                        resolutions[j] = cameraOP[pos][j + 2];
+                                    System.arraycopy(cameraOP[pos], 2, resolutions, 0, cameraOP[pos].length - 2);
+                                    /*for (int j = 0; j < cameraOP[pos].length - 2; j++)
+                                        resolutions[j] = cameraOP[pos][j + 2];*/
                                     ArrayAdapter<String> radapt = new ArrayAdapter<>(SettingsFragment.this.getContext(), android.R.layout.simple_spinner_item, resolutions);
                                     radapt.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
                                     from_format_selection = true;
