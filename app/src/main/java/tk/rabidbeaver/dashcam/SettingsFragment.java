@@ -64,7 +64,7 @@ public class SettingsFragment extends Fragment {
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
                 String mpath = s.toString();
-                while (mpath.charAt(mpath.length()-1)=='/') mpath = mpath.substring(0, mpath.length()-1);
+                while (mpath.length() > 1 && mpath.charAt(mpath.length()-1)=='/') mpath = mpath.substring(0, mpath.length()-1);
                 Log.d("SettingsFragment", "PATH:"+mpath);
                 SharedPreferences.Editor prefedit = prefs.edit();
                 prefedit.putString("path", mpath);
