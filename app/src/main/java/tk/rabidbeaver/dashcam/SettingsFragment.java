@@ -96,6 +96,18 @@ public class SettingsFragment extends Fragment {
         });
         autostart.setChecked(prefs.getBoolean("autostart",true));
 
+        Switch autosave = (Switch) rootView.findViewById(R.id.autosave);
+        autosave.setOnCheckedChangeListener(new Switch.OnCheckedChangeListener(){
+            @Override
+            public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
+                SharedPreferences.Editor prefedit = prefs.edit();
+                prefedit.putBoolean("autosave",b);
+                prefedit.remove("sendto");
+                prefedit.apply();
+            }
+        });
+        autosave.setChecked(prefs.getBoolean("autosave",false));
+
         Switch internal = (Switch) rootView.findViewById(R.id.loginternal);
         internal.setChecked(prefs.getBoolean("loginternal", false));
         internal.setOnCheckedChangeListener(new Switch.OnCheckedChangeListener(){

@@ -35,5 +35,6 @@
         </receiver>
         <receiver android:name=".CleanupReceiver"
             android:process="tk.rabidbeaver.dashcam.cleanupreceiver" />
+        <receiver android:name=".SendSelectionReceiver" android:exported="true"/>
     </application>
 </manifest>

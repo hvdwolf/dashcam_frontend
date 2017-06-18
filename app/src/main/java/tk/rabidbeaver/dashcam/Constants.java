@@ -23,5 +23,6 @@ class Constants {
         int LOAD_DATABASE = -1;
         int DATA_LENGTH = -2;
         int CLEAR_LOG = -3;
+        int UPLOAD_LOGS = -4;
     }
 }

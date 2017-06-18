@@ -53,6 +53,15 @@
             android:layout_width="wrap_content"
             android:layout_height="15dp" />
         <Switch
+            android:id="@+id/autosave"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Auto Share"
+            android:checked="false" />
+        <Space
+            android:layout_width="wrap_content"
+            android:layout_height="15dp" />
+        <Switch
             android:id="@+id/loginternal"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

@@ -10,6 +10,7 @@ import android.os.IBinder;
 import android.os.Message;
 import android.os.Messenger;
 import android.os.RemoteException;
+import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.TabLayout;
 import android.support.v7.app.AppCompatActivity;
 
@@ -18,6 +19,7 @@ import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentPagerAdapter;
 import android.support.v4.view.ViewPager;
 import android.os.Bundle;
+import android.view.View;
 import android.widget.TextView;
 
 import java.util.Hashtable;
@@ -45,6 +47,26 @@ public class DashCam extends AppCompatActivity implements MessengerInterface {
         handlerThread.start();
         IncomingHandler handler = new IncomingHandler(handlerThread);
         mClientMessenger = new Messenger(handler);
+
+        FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
+        fab.setOnClickListener(new FloatingActionButton.OnClickListener(){
+            @Override
+            public void onClick(View v) {
+                uploadLogs();
+            }
+        });
+    }
+
+    private void uploadLogs(){
+        if (mBound){
+            Message msg = Message.obtain(null, Constants.MESSAGES.UPLOAD_LOGS, 0, 0);
+            msg.replyTo = mClientMessenger;
+            try {
+                mServiceMessenger.send(msg);
+            } catch (RemoteException e){
+                e.printStackTrace();
+            }
+        }
     }
 
     @Override

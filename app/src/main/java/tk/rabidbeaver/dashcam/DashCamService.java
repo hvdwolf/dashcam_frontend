@@ -4,6 +4,7 @@ import android.app.AlarmManager;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.ComponentName;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.ContextWrapper;
@@ -20,6 +21,7 @@ import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.location.LocationProvider;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -58,6 +60,7 @@ public class DashCamService extends Service {
     final Messenger mLogMessenger = new Messenger(new LogHandler());
     private boolean autostarter = false;
     private boolean stopped = false;
+    private static Context ctx;
 
     @Override
     public void onCreate() {
@@ -65,6 +68,7 @@ public class DashCamService extends Service {
         ffmpeg = new FFmpeg(DashCamService.this);
         loadFFMpegBinary();
         setupGpsListeners();
+        ctx = this;
     }
 
     @Override
@@ -352,6 +356,34 @@ public class DashCamService extends Service {
         } else logCursor = null;
     }
 
+    private static void uploadLogs(){
+        Intent intent = new Intent(android.content.Intent.ACTION_SEND);
+        intent.setType("application/octet-stream");
+        SharedPreferences st = ctx.getSharedPreferences("Settings", MODE_PRIVATE);
+
+        String path=st.getString("path", "/mnt/external_sdio");
+
+        String send = st.getString("sendto","");
+
+        intent.putExtra(Intent.EXTRA_STREAM, Uri.parse("file://" + path + "/dashcam.db"));
+        intent.putExtra(Intent.EXTRA_SUBJECT, "dashcam_"+new SimpleDateFormat("yyyy.MM.dd HH:mm:ss z", Locale.US).format(new Date())+".db");
+
+
+        Log.d("DASHCAMSERVICE", send+", "+path);
+
+        if (send.length() == 0 && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP_MR1){
+            Intent rIntent = new Intent(ctx, SendSelectionReceiver.class);
+            PendingIntent pIntent = PendingIntent.getBroadcast(ctx, 0, rIntent, PendingIntent.FLAG_CANCEL_CURRENT);
+            ctx.startActivity(Intent.createChooser(intent, "Send Logs to...", pIntent.getIntentSender()));
+        } else {
+            if (send.length() > 0){
+                String[] cmp = send.split("/");
+                intent.setComponent(new ComponentName(cmp[0], cmp[1]));
+            }
+            ctx.startActivity(intent);
+        }
+    }
+
     @Override
     public void onDestroy() {
         // This will probably be executed after ignition is off for a few minutes.
@@ -419,6 +451,8 @@ public class DashCamService extends Service {
                 if (db != null){
                     db.execSQL("DELETE FROM log");
                 }
+            } else if (msg.what == Constants.MESSAGES.UPLOAD_LOGS){
+                uploadLogs();
             } else {
                 logCursor.moveToPosition(logCursor.getCount()-1-msg.what);
 

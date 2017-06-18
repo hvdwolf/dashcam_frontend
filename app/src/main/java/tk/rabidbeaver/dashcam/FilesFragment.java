@@ -1,5 +1,7 @@
 package tk.rabidbeaver.dashcam;
 
+import android.app.PendingIntent;
+import android.content.ComponentName;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -137,7 +139,9 @@ public class FilesFragment extends Fragment {
     }
 
     private void moveFile(String p, Boolean prot) {
-        String rootpath = this.getActivity().getSharedPreferences("Settings", MODE_PRIVATE).getString("path", "/mnt/external_sdio") + "/";
+        SharedPreferences sp = this.getActivity().getSharedPreferences("Settings", MODE_PRIVATE);
+        String rootpath = sp.getString("path", "/mnt/external_sdio") + "/";
+        boolean autosave = sp.getBoolean("autosave", false);
         String startpath;
         String destpath;
         Log.d("FilesFragment", "moveFile: " + Boolean.toString(prot));
@@ -151,6 +155,26 @@ public class FilesFragment extends Fragment {
         Log.d("FilesFragment", "Startpath=" + startpath + ", Destpath=" + destpath);
         File f = new File(startpath);
         if (!f.renameTo(new File(destpath))) Log.d("FilesFragment", "error");
+        if (autosave && prot) {
+            Intent intent = new Intent(android.content.Intent.ACTION_SEND);
+            intent.setType("video/mkv");
+            intent.putExtra(Intent.EXTRA_STREAM, Uri.parse("file://" + destpath));
+
+            SharedPreferences sd = this.getActivity().getSharedPreferences("Settings", MODE_PRIVATE);
+            String send = sd.getString("sendto","");
+
+            if (send.length() == 0 && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP_MR1){
+                Intent rIntent = new Intent(this.getContext(), SendSelectionReceiver.class);
+                PendingIntent pIntent = PendingIntent.getBroadcast(this.getContext(), 0, rIntent, PendingIntent.FLAG_CANCEL_CURRENT);
+                startActivity(Intent.createChooser(intent, "Send to...", pIntent.getIntentSender()));
+            } else {
+                if (send.length() > 0){
+                    String[] cmp = send.split("/");
+                    intent.setComponent(new ComponentName(cmp[0], cmp[1]));
+                }
+                startActivity(intent);
+            }
+        }
         reloadData();
     }
 
