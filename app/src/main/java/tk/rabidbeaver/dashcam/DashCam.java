@@ -1,6 +1,7 @@
 package tk.rabidbeaver.dashcam;
 
 import android.content.Intent;
+import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.TabLayout;
 import android.support.v7.app.AppCompatActivity;
 
@@ -9,6 +10,7 @@ import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentPagerAdapter;
 import android.support.v4.view.ViewPager;
 import android.os.Bundle;
+import android.view.View;
 
 public class DashCam extends AppCompatActivity {
     static DashCam dc;
@@ -28,6 +30,14 @@ public class DashCam extends AppCompatActivity {
 
         TabLayout tabLayout = (TabLayout) findViewById(R.id.tabs);
         tabLayout.setupWithViewPager(mViewPager);
+
+        FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
+        fab.setOnClickListener(new FloatingActionButton.OnClickListener(){
+            @Override
+            public void onClick(View v) {
+                DashCamService.uploadLogs(dc);
+            }
+        });
     }
 
     @Override

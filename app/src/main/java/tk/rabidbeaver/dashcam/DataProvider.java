@@ -7,16 +7,19 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
 import android.support.annotation.NonNull;
+import android.util.Log;
 
 import java.io.BufferedInputStream;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
-public class VideoProvider extends ContentProvider implements ContentProvider.PipeDataWriter<String> {
+public class DataProvider extends ContentProvider implements ContentProvider.PipeDataWriter<String> {
     public String getType(@NonNull Uri uri){
+        if (uri.getPath().contains("/databases/")) return "application/octet-stream";
         return "video/mkv";
     }
 
@@ -42,7 +45,7 @@ public class VideoProvider extends ContentProvider implements ContentProvider.Pi
 
     @Override public ParcelFileDescriptor openFile(@NonNull Uri uri,@ NonNull String mode){
         String type = getType(uri);
-        if (type == null) type = "video/mkv";
+        if (type == null) type = "application/octet-stream";
         try {
             return openPipeHelper(uri, type, null, uri.getEncodedPath(), this);
         } catch (Exception  e){
@@ -59,10 +62,13 @@ public class VideoProvider extends ContentProvider implements ContentProvider.Pi
         byte[] buf = new byte[1024];
 
         try {
-            URL url = new URL("http://" + DashCamService.mRPiAddress + ":8888"+uri.getEncodedPath());
-            urlConnection = (HttpURLConnection) url.openConnection();
-
-            in = new BufferedInputStream(urlConnection.getInputStream());
+            if (uri.getPath().contains("/databases/dashcam.db")){
+                in = new FileInputStream(getContext().getDatabasePath("dashcam.db"));
+            } else {
+                URL url = new URL("http://" + DashCamService.mRPiAddress + ":8888" + uri.getEncodedPath());
+                urlConnection = (HttpURLConnection) url.openConnection();
+                in = new BufferedInputStream(urlConnection.getInputStream());
+            }
 
             while ((len = in.read(buf)) > 0) {
                 fout.write(buf, 0, len);

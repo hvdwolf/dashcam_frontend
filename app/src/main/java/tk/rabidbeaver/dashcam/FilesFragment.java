@@ -208,7 +208,7 @@ public class FilesFragment extends Fragment {
                         Intent intent = new Intent(android.content.Intent.ACTION_SEND);
                         intent.setType("video/mkv");
                         //intent.putExtra(Intent.EXTRA_STREAM, Uri.parse("http://"+DashCamService.mRPiAddress+":8888/protected/"+p));
-                        intent.putExtra(Intent.EXTRA_STREAM, Uri.parse("content://tk.rabidbeaver.dashcam.VideoProvider/protected/"+p));
+                        intent.putExtra(Intent.EXTRA_STREAM, Uri.parse("content://tk.rabidbeaver.dashcam.DataProvider/protected/"+p));
 
                         SharedPreferences sd = FilesFragment.this.getActivity().getSharedPreferences("Settings", MODE_PRIVATE);
                         String send = sd.getString("sendto","");

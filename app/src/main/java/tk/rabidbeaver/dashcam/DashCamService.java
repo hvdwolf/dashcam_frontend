@@ -3,12 +3,24 @@ package tk.rabidbeaver.dashcam;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.ComponentName;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteOpenHelper;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.location.GpsStatus;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
+import android.location.LocationProvider;
+import android.net.Uri;
 import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
+import android.os.Bundle;
 import android.os.IBinder;
 import android.support.v7.app.NotificationCompat;
 import android.util.Log;
@@ -23,6 +35,9 @@ import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.SocketTimeoutException;
 import java.net.URL;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 public class DashCamService extends Service {
 
@@ -33,10 +48,17 @@ public class DashCamService extends Service {
     private boolean dispose = false;
     private boolean forcestopped = false;
 
+    private static final int DATABASE_VERSION = 1;
+
+    private LocationManager locationManager;
+    private LocationListener locationListener;
+
     private NsdManager mNsdManager;
     private NsdManager.DiscoveryListener mDiscoveryListener;
     private NsdServiceInfo mServiceInfo;
     public static String mRPiAddress = "";
+
+    protected SQLiteDatabase db = null;
 
     // The NSD service type that the RPi exposes.
     private static final String SERVICE_TYPE = "_workstation._tcp.";
@@ -46,6 +68,20 @@ public class DashCamService extends Service {
         super.onCreate();
         mRPiAddress = "";
         forcestopped = false;
+        setupGpsListeners();
+        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, locationListener);
+
+        db = new SQLiteOpenHelper(this, "dashcam.db", null, DATABASE_VERSION){
+            public void onCreate(SQLiteDatabase db) {
+                // note %f fractional (1/1000th) seconds
+                db.execSQL("CREATE TABLE gps (time TEXT PRIMARY KEY DEFAULT(STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')), value TEXT)");
+            }
+            public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+                // This is still first version, so there isn't anything to upgrade to.
+                // DO NOTHING.
+            }
+        }.getWritableDatabase();
+
         mNsdManager = (NsdManager)(getApplicationContext().getSystemService(Context.NSD_SERVICE));
         initializeDiscoveryListener();
         mNsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, mDiscoveryListener);
@@ -80,6 +116,61 @@ public class DashCamService extends Service {
                 }
             }
         }).start();
+    }
+
+    @SuppressWarnings("deprecation")
+    private void setupGpsListeners(){
+        locationListener = new LocationListener() {
+            // Processed coordinates
+            public void onLocationChanged(Location location) {
+                // Called when a new location is found by the network location provider.
+                Log.d("DashCam GPS", new SimpleDateFormat("yyyy.MM.dd HH:mm:ss z", Locale.US).format(new Date(location.getTime())) + ": " + location.getLatitude() + ", " + location.getLongitude() + ", accuracy: (" + location.getAccuracy() + " m), altitude: (" + location.getAltitude() + " m over WGS 84), bearing: (" + location.getBearing() + " deg), speed: (" + location.getSpeed() + " m/s), satellites: (" + location.getExtras().getInt("satellites") + ")");
+            }
+            public void onStatusChanged(String provider, int status, Bundle extras) {
+                if (status == LocationProvider.AVAILABLE){
+                    Log.d("DashCam GPS", "GPS fix acquired");
+                } else {
+                    Log.d("DashCam GPS", "No valid GPS fix");
+                }
+            }
+            public void onProviderEnabled(String provider) {}
+            public void onProviderDisabled(String provider) {}
+        };
+        locationManager = (LocationManager) this.getSystemService(Context.LOCATION_SERVICE);
+        // Details about the actual satellites used in the current "fix"
+                /*locationManager.addGpsStatusListener(new GpsStatus.Listener(){
+                    @Override
+                    public void onGpsStatusChanged(int event){
+                        Log.d("DashCam GPS", "event: "+Integer.toString(event));
+                        gs=locationManager.getGpsStatus(gs);
+                        if (gs != null){
+                            Iterable<GpsSatellite>satellites = gs.getSatellites();
+                            Iterator<GpsSatellite> sat = satellites.iterator();
+                            while (sat.hasNext()) {
+                                GpsSatellite satellite = sat.next();
+                                Log.d("DashCam GPS", satellite.getPrn() + "," + satellite.usedInFix() + "," + satellite.getSnr() + "," + satellite.getAzimuth() + "," + satellite.getElevation());
+                            }
+                        }
+                    }
+                });*/
+        // Raw NMEA stream (this is good for location logging)
+        // NOTE: the following is deprecated, but its replacement isn't added until API 24 -- we target API 22.
+        locationManager.addNmeaListener(new GpsStatus.NmeaListener(){
+            @Override
+            public void onNmeaReceived(long timestamp, String nmea){
+                writeGpsLog(nmea);
+                Log.d("DashCam GPS", new SimpleDateFormat("yyyy.MM.dd HH:mm:ss z", Locale.US).format(new Date(timestamp))+": NMEA: "+nmea);
+            }
+        });
+    }
+
+    private void writeGpsLog(String s){
+        //TODO: I'd like to move this to the rpi, use HTTP POST to send logs there.
+        if (db != null){
+            ContentValues cv = new ContentValues();
+            cv.put("value", s.replace("\n",""));
+            db.insert("gps", null, cv);
+        }
     }
 
     private void showNotification() {
@@ -220,6 +311,8 @@ public class DashCamService extends Service {
     }
 
     private void updateNotification(Boolean connected, Boolean recording) {
+        if (notification == null) showNotification();
+
         PendingIntent pi = PendingIntent.getActivity(getApplicationContext(), 0,
                 new Intent(getApplicationContext(), DashCam.class),
                 PendingIntent.FLAG_UPDATE_CURRENT);
@@ -266,6 +359,29 @@ public class DashCamService extends Service {
     @Override
     public IBinder onBind(Intent intent) {
         return null;
+    }
+
+    protected static void uploadLogs(Context ctx){
+        Intent intent = new Intent(android.content.Intent.ACTION_SEND);
+        intent.setType("application/octet-stream");
+        SharedPreferences st = ctx.getSharedPreferences("Settings", MODE_PRIVATE);
+
+        String send = st.getString("sendto","");
+
+        intent.putExtra(Intent.EXTRA_STREAM, Uri.parse("content://tk.rabidbeaver.dashcam.DataProvider/databases/dashcam.db"));
+        intent.putExtra(Intent.EXTRA_SUBJECT, "dashcam_"+new SimpleDateFormat("yyyy.MM.dd HH:mm:ss z", Locale.US).format(new Date())+".db");
+
+        if (send.length() == 0 && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP_MR1){
+            Intent rIntent = new Intent(ctx, SendSelectionReceiver.class);
+            PendingIntent pIntent = PendingIntent.getBroadcast(ctx, 0, rIntent, PendingIntent.FLAG_CANCEL_CURRENT);
+            ctx.startActivity(Intent.createChooser(intent, "Send Logs to...", pIntent.getIntentSender()));
+        } else {
+            if (send.length() > 0){
+                String[] cmp = send.split("/");
+                intent.setComponent(new ComponentName(cmp[0], cmp[1]));
+            }
+            ctx.startActivity(intent);
+        }
     }
 
     private void initializeDiscoveryListener() {

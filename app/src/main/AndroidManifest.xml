@@ -35,8 +35,8 @@
             </intent-filter>
         </receiver>
         <receiver android:name=".SendSelectionReceiver" android:exported="true"/>
-        <provider android:name=".VideoProvider"
-                  android:authorities="tk.rabidbeaver.dashcam.VideoProvider"
+        <provider android:name=".DataProvider"
+                  android:authorities="tk.rabidbeaver.dashcam.DataProvider"
                   android:grantUriPermissions="true" />
 
 
