@@ -112,8 +112,9 @@ public class DashCamService extends Service {
                 Log.d("RECORD","running startFFmpeg");
                 String response = "";
                 HttpURLConnection urlConnection = null;
-                //TODO: record = {current Unix time}
-                String POSTDATA = "record=blah";
+
+                Long tsLong = System.currentTimeMillis()/1000;
+                String POSTDATA = "record="+tsLong.toString();
                 try {
                     URL url = new URL("http://"+mRPiAddress+":8888/record");
                     urlConnection = (HttpURLConnection) url.openConnection();
