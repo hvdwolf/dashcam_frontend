@@ -22,22 +22,29 @@ import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.TextView;
 
-import java.io.File;
-import java.io.FilenameFilter;
+import org.xmlpull.v1.XmlPullParser;
+import org.xmlpull.v1.XmlPullParserFactory;
+
+import java.io.BufferedInputStream;
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.StringReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 
 import static android.content.Context.MODE_PRIVATE;
+import static java.lang.Thread.sleep;
 
 public class FilesFragment extends Fragment {
     private View rootView;
     private boolean created = false;
     private SwipeRefreshLayout pullrefresher;
     private RecyclerViewAdapter adapter;
-    private List<File> data;
+    private List<ProtectString> data;
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -81,125 +88,183 @@ public class FilesFragment extends Fragment {
     }
 
     private void reloadData() {
-        // if not exists, create directory to store protected videos;
-        SharedPreferences prefs = this.getActivity().getSharedPreferences("Settings", MODE_PRIVATE);
-        String rootpath = prefs.getString("path", "/mnt/external_sdio");
-        Log.d("FilesFragment", rootpath);
-        File ptect = new File(rootpath + "/protected");
-        if (!ptect.exists()) {
-            if (!ptect.mkdir()) Log.d("FilesFragment", "error");
-        } else if (!ptect.isDirectory()) {
-            if (!ptect.delete()) Log.d("FilesFragment", "error");
-            if (!ptect.mkdir()) Log.d("FilesFragment", "error");
-        }
+        new Thread(new Runnable() {
+            public void run() {
+                Log.d("LIST", "mRPiAddress: " + DashCamService.mRPiAddress);
+                List<ProtectString> files = new ArrayList<>();
+                if (DashCamService.mRPiAddress.length() > 0) {
 
-        try {
-            File path = new File(rootpath);
-            if (!path.exists()) return;
-            File ppath = new File(rootpath + "/protected");
+                    String response = "";
+                    HttpURLConnection urlConnection = null;
+                    try {
+                        URL url = new URL("http://" + DashCamService.mRPiAddress + ":8888/list");
+                        urlConnection = (HttpURLConnection) url.openConnection();
 
-            // Read the directory into an ArrayList
-            List<File> files = new ArrayList<>(Arrays.asList(path.listFiles(new FilenameFilter() {
-                public boolean accept(File path, String name) {
-                    return name.endsWith(".mkv");
+                        InputStream in = new BufferedInputStream(urlConnection.getInputStream());
+                        BufferedReader br = new BufferedReader(new InputStreamReader(in));
+                        String line;
+                        while ((line = br.readLine()) != null) {
+                            response += line;
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                    Log.d("LIST", response);
+                    if (urlConnection != null) urlConnection.disconnect();
+
+                    try {
+                        XmlPullParserFactory factory = XmlPullParserFactory.newInstance();
+                        factory.setNamespaceAware(true);
+                        XmlPullParser xpp = factory.newPullParser();
+                        xpp.setInput(new StringReader(response));
+
+                        int eventType = xpp.getEventType();
+                        while (eventType != XmlPullParser.END_DOCUMENT) {
+                            if (eventType == XmlPullParser.START_TAG) {
+                                if (xpp.getName().equals("file")) {
+                                    String filename = xpp.getAttributeValue(null, "name");
+                                    boolean prot = xpp.getAttributeValue(null, "protected").contentEquals("1");
+                                    files.add(new ProtectString(filename,prot));
+                                    Log.d("LIST","Added: "+filename+", "+Boolean.toString(prot));
+                                }
+                            }
+                            eventType = xpp.next();
+                        }
+                    } catch (Exception e){e.printStackTrace();}
+
+                } else {
+                    new Thread(new Runnable() {
+                        public void run() {
+                            while (DashCamService.mRPiAddress.length() == 0){
+                                try {
+                                    sleep(500);
+                                } catch (Exception e){e.printStackTrace();}
+                            }
+                            reloadData();
+                        }
+                    }).run();
                 }
-            })));
-            List<File> pfiles = new ArrayList<>(Arrays.asList(ppath.listFiles(new FilenameFilter() {
-                public boolean accept(File path, String name) {
-                    return name.endsWith(".mkv");
+
+                data.clear();
+                data.addAll(files);
+
+                if (pullrefresher != null) {
+                    pullrefresher.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            pullrefresher.setRefreshing(false);
+                            adapter.notifyDataSetChanged();
+                        }
+                    });
                 }
-            })));
-
-            // Sort the ArrayList according to lastModified time
-            Collections.sort(files, new Comparator<File>() {
-                public int compare(File f1, File f2) {
-                    if (f1.lastModified() > f2.lastModified()) return -1;
-                    else if (f1.lastModified() < f2.lastModified()) return 1;
-                    return 0;
-                }
-            });
-            Collections.sort(pfiles, new Comparator<File>() {
-                public int compare(File f1, File f2) {
-                    if (f1.lastModified() > f2.lastModified()) return -1;
-                    else if (f1.lastModified() < f2.lastModified()) return 1;
-                    return 0;
-                }
-            });
-
-            data.clear();
-            data.addAll(pfiles);
-            data.addAll(files);
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        if (pullrefresher != null) pullrefresher.setRefreshing(false);
-
-        adapter.notifyDataSetChanged();
+            }
+        }).start();
     }
 
-    private void moveFile(String p, Boolean prot) {
-        SharedPreferences sp = this.getActivity().getSharedPreferences("Settings", MODE_PRIVATE);
-        String rootpath = sp.getString("path", "/mnt/external_sdio") + "/";
-        boolean autosave = sp.getBoolean("autosave", false);
-        String startpath;
-        String destpath;
-        Log.d("FilesFragment", "moveFile: " + Boolean.toString(prot));
-        if (prot) {
-            startpath = rootpath + p;
-            destpath = rootpath + "protected/" + p;
-        } else {
-            startpath = rootpath + "protected/" + p;
-            destpath = rootpath + p;
-        }
-        Log.d("FilesFragment", "Startpath=" + startpath + ", Destpath=" + destpath);
-        File f = new File(startpath);
-        if (!f.renameTo(new File(destpath))) Log.d("FilesFragment", "error");
-        if (autosave && prot) {
-            Intent intent = new Intent(android.content.Intent.ACTION_SEND);
-            intent.setType("video/mkv");
-            intent.putExtra(Intent.EXTRA_STREAM, Uri.parse("file://" + destpath));
+    private void moveFile(final String p, final Boolean prot) {
 
-            SharedPreferences sd = this.getActivity().getSharedPreferences("Settings", MODE_PRIVATE);
-            String send = sd.getString("sendto","");
+        new Thread(new Runnable() {
+            public void run() {
+                String action = "protect";
+                if (!prot) action = "unprotect";
+                Log.d("MOVE","moving file");
+                String response = "";
+                HttpURLConnection urlConnection = null;
+                String POSTDATA = action+"="+p;
+                try {
+                    URL url = new URL("http://"+DashCamService.mRPiAddress+":8888");
+                    urlConnection = (HttpURLConnection) url.openConnection();
+                    urlConnection.setRequestMethod("POST");
+                    urlConnection.setDoOutput(true);
+                    OutputStream os = urlConnection.getOutputStream();
+                    os.write(POSTDATA.getBytes());
+                    os.flush();
+                    os.close();
+                    // For POST only - END
 
-            if (send.length() == 0 && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP_MR1){
-                Intent rIntent = new Intent(this.getContext(), SendSelectionReceiver.class);
-                PendingIntent pIntent = PendingIntent.getBroadcast(this.getContext(), 0, rIntent, PendingIntent.FLAG_CANCEL_CURRENT);
-                startActivity(Intent.createChooser(intent, "Send to...", pIntent.getIntentSender()));
-            } else {
-                if (send.length() > 0){
-                    String[] cmp = send.split("/");
-                    intent.setComponent(new ComponentName(cmp[0], cmp[1]));
+                    int responseCode = urlConnection.getResponseCode();
+                    Log.d("MOVE","code: " + responseCode);
+
+                    if (responseCode == HttpURLConnection.HTTP_OK) { //success
+                        BufferedReader in = new BufferedReader(new InputStreamReader(urlConnection.getInputStream()));
+                        String inputLine;
+
+                        while ((inputLine = in.readLine()) != null) {
+                            response+=inputLine;
+                        }
+                        in.close();
+                    }
+
+                } catch (Exception e) {
+                    e.printStackTrace();
                 }
-                startActivity(intent);
+                Log.d("MOVE",response);
+                if (urlConnection != null) urlConnection.disconnect();
+
+                if (response.contains("<fileop status=\"success\" />")){
+                    reloadData();
+                    SharedPreferences sp = FilesFragment.this.getActivity().getSharedPreferences("Settings", MODE_PRIVATE);
+                    if (prot && sp.getBoolean("autosave", false)){
+                        Intent intent = new Intent(android.content.Intent.ACTION_SEND);
+                        intent.setType("video/mkv");
+                        //intent.putExtra(Intent.EXTRA_STREAM, Uri.parse("http://"+DashCamService.mRPiAddress+":8888/protected/"+p));
+                        intent.putExtra(Intent.EXTRA_STREAM, Uri.parse("content://tk.rabidbeaver.dashcam.VideoProvider/protected/"+p));
+
+                        SharedPreferences sd = FilesFragment.this.getActivity().getSharedPreferences("Settings", MODE_PRIVATE);
+                        String send = sd.getString("sendto","");
+
+                        if (send.length() == 0 && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP_MR1){
+                            Intent rIntent = new Intent(FilesFragment.this.getContext(), SendSelectionReceiver.class);
+                            PendingIntent pIntent = PendingIntent.getBroadcast(FilesFragment.this.getContext(), 0, rIntent, PendingIntent.FLAG_CANCEL_CURRENT);
+                            startActivity(Intent.createChooser(intent, "Send to...", pIntent.getIntentSender()));
+                        } else {
+                            if (send.length() > 0){
+                                String[] cmp = send.split("/");
+                                intent.setComponent(new ComponentName(cmp[0], cmp[1]));
+                            }
+                            startActivity(intent);
+                        }
+                    }
+                }
+
             }
-        }
+        }).start();
+
         reloadData();
     }
 
+    private class ProtectString {
+        String filename;
+        boolean isProtected;
+        ProtectString(String filename, boolean isProtected){
+            this.filename=filename;
+            this.isProtected=isProtected;
+        }
+    }
+
     class RecyclerViewAdapter extends RecyclerView.Adapter<RecyclerViewAdapter.ListItemViewHolder> {
-        RecyclerViewAdapter() {}
+        RecyclerViewAdapter() {
+        }
 
         @Override
         public ListItemViewHolder onCreateViewHolder(ViewGroup viewGroup, int viewType) {
-            CardView cardView = (CardView)LayoutInflater.from(viewGroup.getContext()).inflate(R.layout.file, viewGroup, false);
+            CardView cardView = (CardView) LayoutInflater.from(viewGroup.getContext()).inflate(R.layout.file, viewGroup, false);
             setupCard(cardView);
 
             return new ListItemViewHolder(cardView);
         }
 
-        private void setupCard(CardView cardView){
+        private void setupCard(CardView cardView) {
             CheckBox protbox = (CheckBox) cardView.findViewById(R.id.protbox);
             cardView.setOnClickListener(new CardView.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    TextView filename = (TextView)v.findViewById(R.id.filelab);
-                    ListItemViewHolder vh = (ListItemViewHolder)filename.getTag();
+                    TextView filename = (TextView) v.findViewById(R.id.filelab);
+                    ListItemViewHolder vh = (ListItemViewHolder) filename.getTag();
                     int position = vh.getAdapterPosition();
-                    File f = data.get(position);
+                    ProtectString f = data.get(position);
 
-                    String uri = "file://"+f.getAbsolutePath();
+                    String uri = "http://"+DashCamService.mRPiAddress+":8888/"+(f.isProtected?"protected/":"")+f.filename;
 
                     Log.d("FilesFragment", "Clicked file with URI: " + uri);
                     Intent videoPlay = new Intent(Intent.ACTION_VIEW);
@@ -216,12 +281,53 @@ public class FilesFragment extends Fragment {
                             .setIcon(android.R.drawable.ic_dialog_alert)
                             .setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
                                 public void onClick(DialogInterface dialog, int whichButton) {
-                                    TextView filename = (TextView)v.findViewById(R.id.filelab);
-                                    ListItemViewHolder vh = (ListItemViewHolder)filename.getTag();
+                                    TextView filename = (TextView) v.findViewById(R.id.filelab);
+                                    ListItemViewHolder vh = (ListItemViewHolder) filename.getTag();
                                     int position = vh.getAdapterPosition();
-                                    File f = data.get(position);
+                                    final ProtectString f = data.get(position);
 
-                                    if (!f.delete()) Log.d("FilesFragment", "error");
+                                    new Thread(new Runnable() {
+                                        public void run() {
+
+                                            Log.d("DELETE","deleting file");
+                                            String response = "";
+                                            HttpURLConnection urlConnection = null;
+                                            String POSTDATA = "delete="+f.filename;
+                                            try {
+                                                URL url = new URL("http://"+DashCamService.mRPiAddress+":8888");
+                                                urlConnection = (HttpURLConnection) url.openConnection();
+                                                urlConnection.setRequestMethod("POST");
+                                                urlConnection.setDoOutput(true);
+                                                OutputStream os = urlConnection.getOutputStream();
+                                                os.write(POSTDATA.getBytes());
+                                                os.flush();
+                                                os.close();
+                                                // For POST only - END
+
+                                                int responseCode = urlConnection.getResponseCode();
+                                                Log.d("DELETE","code: " + responseCode);
+
+                                                if (responseCode == HttpURLConnection.HTTP_OK) { //success
+                                                    BufferedReader in = new BufferedReader(new InputStreamReader(urlConnection.getInputStream()));
+                                                    String inputLine;
+
+                                                    while ((inputLine = in.readLine()) != null) {
+                                                        response+=inputLine;
+                                                    }
+                                                    in.close();
+                                                }
+
+                                            } catch (Exception e) {
+                                                e.printStackTrace();
+                                            }
+                                            Log.d("DELETE",response);
+                                            if (urlConnection != null) urlConnection.disconnect();
+
+                                            if (response.contains("<fileop status=\"success\" />")) reloadData();
+
+                                        }
+                                    }).start();
+
                                     reloadData();
                                 }
                             })
@@ -233,11 +339,11 @@ public class FilesFragment extends Fragment {
             protbox.setOnCheckedChangeListener(new CheckBox.OnCheckedChangeListener() {
                 @Override
                 public void onCheckedChanged(CompoundButton button, boolean b) {
-                    ListItemViewHolder vh = (ListItemViewHolder)button.getTag();
-                    if (!vh.protbox_disabled){
+                    ListItemViewHolder vh = (ListItemViewHolder) button.getTag();
+                    if (!vh.protbox_disabled) {
                         int position = vh.getAdapterPosition();
-                        File f = data.get(position);
-                        moveFile(f.getName(), b);
+                        ProtectString f = data.get(position);
+                        moveFile(f.filename, b);
                     }
                     vh.protbox_disabled = false;
                 }
@@ -246,9 +352,9 @@ public class FilesFragment extends Fragment {
 
         @Override
         public void onBindViewHolder(ListItemViewHolder viewHolder, int position) {
-            File f = data.get(position);
-            viewHolder.filename.setText(String.valueOf(f.getName()));
-            boolean shouldBeChecked = f.getAbsolutePath().contains("/protected/");
+            ProtectString f = data.get(position);
+            viewHolder.filename.setText(String.valueOf(f.filename));
+            boolean shouldBeChecked = f.isProtected;
             boolean isChecked = viewHolder.protbox.isChecked();
             if (shouldBeChecked != isChecked) {
                 viewHolder.protbox_disabled = true;
