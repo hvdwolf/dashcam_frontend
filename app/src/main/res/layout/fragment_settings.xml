@@ -36,6 +36,15 @@
             android:layout_width="wrap_content"
             android:layout_height="15dp" />
         <Switch
+            android:id="@+id/loggpspi"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="GPS log on rPi"
+            android:checked="false" />
+        <Space
+            android:layout_width="wrap_content"
+            android:layout_height="15dp" />
+        <Switch
             android:id="@+id/autohotspot"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

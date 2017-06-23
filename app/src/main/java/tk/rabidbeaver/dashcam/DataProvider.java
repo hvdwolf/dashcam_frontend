@@ -19,7 +19,7 @@ import java.net.URL;
 
 public class DataProvider extends ContentProvider implements ContentProvider.PipeDataWriter<String> {
     public String getType(@NonNull Uri uri){
-        if (uri.getPath().contains("/databases/")) return "application/octet-stream";
+        if (uri.getPath().contains("/databases/") || uri.getPath().contains("gps.db")) return "application/octet-stream";
         return "video/mkv";
     }
 

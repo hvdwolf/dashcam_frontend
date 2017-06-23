@@ -46,7 +46,7 @@ public class DashCamService extends Service {
     private NotificationCompat.Builder notification;
     private boolean autostarter = false;
     private boolean dispose = false;
-    private boolean forcestopped = false;
+    private static boolean forcestopped = false;
 
     private static final int DATABASE_VERSION = 1;
 
@@ -58,6 +58,7 @@ public class DashCamService extends Service {
     private NsdServiceInfo mServiceInfo;
     public static String mRPiAddress = "";
     private boolean autohotspot = false;
+    private static boolean gpslogpi = false;
 
     protected SQLiteDatabase db = null;
 
@@ -68,7 +69,6 @@ public class DashCamService extends Service {
     public void onCreate() {
         super.onCreate();
         mRPiAddress = "";
-        forcestopped = false;
 
         db = new SQLiteOpenHelper(this, "dashcam.db", null, DATABASE_VERSION){
             public void onCreate(SQLiteDatabase db) {
@@ -91,6 +91,7 @@ public class DashCamService extends Service {
         SharedPreferences prefs = getSharedPreferences("Settings", MODE_PRIVATE);
         if (prefs.getBoolean("autostart", true)) autostarter = true;
         if (prefs.getBoolean("autohotspot", false)) autohotspot = true;
+        if (prefs.getBoolean("gpslogpi", false)) gpslogpi = true;
         boolean gpslog = prefs.getBoolean("gpslog",false);
 
         if (gpslog) {
@@ -184,9 +185,52 @@ public class DashCamService extends Service {
         });
     }
 
-    private void writeGpsLog(String s){
-        //TODO: I'd like to move this to the rpi, use HTTP POST to send logs there.
-        if (db != null){
+    private void writeGpsLog(final String s){
+        if (gpslogpi){
+            new Thread(new Runnable() {
+                String POSTDATA;
+                public void run() {
+                    String response = "";
+                    HttpURLConnection urlConnection = null;
+
+                    POSTDATA = "gpslog="+s;
+                    URL url;
+                    try {
+                        url = new URL("http://"+mRPiAddress+":8888");
+
+                        urlConnection = (HttpURLConnection) url.openConnection();
+                        urlConnection.setConnectTimeout(1000);
+                        urlConnection.setReadTimeout(1000);
+                        urlConnection.setRequestMethod("POST");
+                        urlConnection.setDoOutput(true);
+
+                        OutputStream os = urlConnection.getOutputStream();
+                        os.write(POSTDATA.getBytes());
+                        os.flush();
+                        os.close();
+                        // For POST only - END
+
+                        int responseCode = urlConnection.getResponseCode();
+                        Log.d("GPSLOG","code: " + responseCode);
+
+                        if (responseCode == HttpURLConnection.HTTP_OK) { //success
+                            BufferedReader in = new BufferedReader(new InputStreamReader(urlConnection.getInputStream()));
+                            String inputLine;
+
+                            while ((inputLine = in.readLine()) != null) {
+                                response+=inputLine;
+                            }
+                            in.close();
+                        }
+
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                    Log.d("GPSLOG",response);
+                    if (urlConnection != null) urlConnection.disconnect();
+                }
+            }).start();
+        } else if (db != null){
             ContentValues cv = new ContentValues();
             cv.put("value", s.replace("\n",""));
             db.insert("gps", null, cv);
@@ -295,6 +339,7 @@ public class DashCamService extends Service {
             URL url = new URL("http://" + mRPiAddress + ":8888/check");
             urlConnection = (HttpURLConnection) url.openConnection();
             urlConnection.setConnectTimeout(2000);
+            urlConnection.setReadTimeout(2000);
         } catch (IOException ioe) {
             ioe.printStackTrace();
             return;
@@ -304,9 +349,9 @@ public class DashCamService extends Service {
             urlConnection.connect();
         } catch (SocketTimeoutException ste) {
             ste.printStackTrace();
-            updateNotification(false, false);
             return;
         } catch (IOException ioe) {
+            updateNotification(false, false);
             ioe.printStackTrace();
             return;
         }
@@ -388,7 +433,10 @@ public class DashCamService extends Service {
 
         String send = st.getString("sendto","");
 
-        intent.putExtra(Intent.EXTRA_STREAM, Uri.parse("content://tk.rabidbeaver.dashcam.DataProvider/databases/dashcam.db"));
+        if (gpslogpi)
+            intent.putExtra(Intent.EXTRA_STREAM, Uri.parse("content://tk.rabidbeaver.dashcam.DataProvider/gps.db"));
+        else
+            intent.putExtra(Intent.EXTRA_STREAM, Uri.parse("content://tk.rabidbeaver.dashcam.DataProvider/databases/dashcam.db"));
         intent.putExtra(Intent.EXTRA_SUBJECT, "dashcam_"+new SimpleDateFormat("yyyy.MM.dd HH:mm:ss z", Locale.US).format(new Date())+".db");
 
         if (send.length() == 0 && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP_MR1){
@@ -476,7 +524,7 @@ public class DashCamService extends Service {
                 //TODO: Sometimes this seems to be picking up an IPv6 address.
                 mRPiAddress = address;
 
-                if (autostarter) startFFmpeg();
+                if (autostarter && !forcestopped) startFFmpeg();
             }
         };
     }

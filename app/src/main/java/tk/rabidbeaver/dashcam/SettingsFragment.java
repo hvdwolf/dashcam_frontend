@@ -61,6 +61,17 @@ public class SettingsFragment extends Fragment {
         });
         gpslog.setChecked(prefs.getBoolean("gpslog",false));
 
+        Switch gpslogpi = (Switch) rootView.findViewById(R.id.loggpspi);
+        gpslogpi.setOnCheckedChangeListener(new Switch.OnCheckedChangeListener(){
+            @Override
+            public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
+                SharedPreferences.Editor prefedit = prefs.edit();
+                prefedit.putBoolean("gpslogpi",b);
+                prefedit.apply();
+            }
+        });
+        gpslogpi.setChecked(prefs.getBoolean("gpslogpi",false));
+
         Switch autohotspot = (Switch) rootView.findViewById(R.id.autohotspot);
         autohotspot.setOnCheckedChangeListener(new Switch.OnCheckedChangeListener(){
             @Override
