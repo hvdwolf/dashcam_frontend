@@ -1,5 +1,6 @@
 package tk.rabidbeaver.dashcam;
 
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.support.v4.app.Fragment;
@@ -42,6 +43,31 @@ public class SettingsFragment extends Fragment {
             }
         });
         autosave.setChecked(prefs.getBoolean("autosave",false));
+
+        Switch gpslog = (Switch) rootView.findViewById(R.id.loggps);
+        gpslog.setOnCheckedChangeListener(new Switch.OnCheckedChangeListener(){
+            @Override
+            public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
+                SharedPreferences.Editor prefedit = prefs.edit();
+                prefedit.putBoolean("gpslog",b);
+                prefedit.apply();
+                Intent service = new Intent(getContext(), DashCamService.class);
+                service.setAction(Constants.ACTION.RELOADGPS);
+                getContext().startService(service);
+            }
+        });
+        gpslog.setChecked(prefs.getBoolean("gpslog",false));
+
+        Switch autohotspot = (Switch) rootView.findViewById(R.id.autohotspot);
+        autohotspot.setOnCheckedChangeListener(new Switch.OnCheckedChangeListener(){
+            @Override
+            public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
+                SharedPreferences.Editor prefedit = prefs.edit();
+                prefedit.putBoolean("autohotspot",b);
+                prefedit.apply();
+            }
+        });
+        autohotspot.setChecked(prefs.getBoolean("autohotspot",false));
 
         return rootView;
     }

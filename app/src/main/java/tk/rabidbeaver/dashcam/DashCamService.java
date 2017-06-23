@@ -57,6 +57,7 @@ public class DashCamService extends Service {
     private NsdManager.DiscoveryListener mDiscoveryListener;
     private NsdServiceInfo mServiceInfo;
     public static String mRPiAddress = "";
+    private boolean autohotspot = false;
 
     protected SQLiteDatabase db = null;
 
@@ -68,8 +69,6 @@ public class DashCamService extends Service {
         super.onCreate();
         mRPiAddress = "";
         forcestopped = false;
-        setupGpsListeners();
-        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, locationListener);
 
         db = new SQLiteOpenHelper(this, "dashcam.db", null, DATABASE_VERSION){
             public void onCreate(SQLiteDatabase db) {
@@ -89,7 +88,20 @@ public class DashCamService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (getSharedPreferences("Settings", MODE_PRIVATE).getBoolean("autostart", true)) autostarter = true;
+        SharedPreferences prefs = getSharedPreferences("Settings", MODE_PRIVATE);
+        if (prefs.getBoolean("autostart", true)) autostarter = true;
+        if (prefs.getBoolean("autohotspot", false)) autohotspot = true;
+        boolean gpslog = prefs.getBoolean("gpslog",false);
+
+        if (gpslog) {
+            setupGpsListeners();
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, locationListener);
+        } else if (locationManager != null){
+            locationManager.removeUpdates(locationListener);
+            locationManager = null;
+            locationListener = null;
+        }
+
         if (!IS_SERVICE_RUNNING) {
             showNotification();
         } else {
@@ -106,8 +118,16 @@ public class DashCamService extends Service {
         new Thread(new Runnable() {
             public void run() {
                 dispose = false;
+                int counter = 0;
                 while (!dispose) {
+                    if (autohotspot && !ApManager.isApOn(getApplicationContext())) ApManager.configApState(getApplicationContext());
                     checkFFmpeg();
+
+                    // REAP the gps database
+                    if (counter == 0 && db != null) db.rawQuery("DELETE FROM gps WHERE time < (SELECT time FROM gps ORDER BY time DESC LIMIT 1 OFFSET 1000000)", null);
+                    else if (counter >= 720) counter = 0;
+                    else counter++;
+
                     try {
                         Thread.sleep(5000);
                     } catch (Exception e){
@@ -452,6 +472,8 @@ public class DashCamService extends Service {
                 InetAddress host = mServiceInfo.getHost();
                 String address = host.getHostAddress();
                 Log.d("NSD", "Resolved address = " + address);
+
+                //TODO: Sometimes this seems to be picking up an IPv6 address.
                 mRPiAddress = address;
 
                 if (autostarter) startFFmpeg();
