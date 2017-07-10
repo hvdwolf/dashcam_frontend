@@ -7,7 +7,6 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
 import android.support.annotation.NonNull;
-import android.util.Log;
 
 import java.io.BufferedInputStream;
 import java.io.FileInputStream;
@@ -65,7 +64,7 @@ public class DataProvider extends ContentProvider implements ContentProvider.Pip
             if (uri.getPath().contains("/databases/dashcam.db")){
                 in = new FileInputStream(getContext().getDatabasePath("dashcam.db"));
             } else {
-                URL url = new URL("http://" + DashCamService.mRPiAddress + ":8888" + uri.getEncodedPath());
+                URL url = new URL("http://" + DashCamService.mRPiAddress + ":8888" + uri.getEncodedPath() + (mimeType.contains("video")?"?gpslog":""));
                 urlConnection = (HttpURLConnection) url.openConnection();
                 in = new BufferedInputStream(urlConnection.getInputStream());
             }

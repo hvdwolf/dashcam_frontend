@@ -30,7 +30,7 @@
             android:id="@+id/loggps"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Log GPS trace"
+            android:text="Use Android GPS"
             android:checked="false" />
         <Space
             android:layout_width="wrap_content"
@@ -41,6 +41,12 @@
             android:layout_height="wrap_content"
             android:text="GPS log on rPi"
             android:checked="false" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="20dp"
+            android:layout_marginEnd="20dp"
+            android:text="Note: Since we are dealing with two devices, we are potentially dealing with two GPS units. One on this Android device, and even better, one on the rPi. Selection of ONE GPS switch will cause that device to generate its own gps logs and store them on itself. Selection of BOTH GPS switches will cause the Android device to generate the GPS log, but store it on the rPi."/>
         <Space
             android:layout_width="wrap_content"
             android:layout_height="15dp" />
@@ -50,12 +56,6 @@
             android:layout_height="wrap_content"
             android:text="Auto-enable wifi hotspot"
             android:checked="false" />
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="20dp"
-            android:layout_marginEnd="20dp"
-            android:text="Not recommended. Use of BluetoothTethering service is preferred."/>
 
     </LinearLayout>
 </ScrollView>

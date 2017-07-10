@@ -3,15 +3,19 @@ package tk.rabidbeaver.dashcam;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.bluetooth.BluetoothAdapter;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.hardware.display.DisplayManager;
 import android.location.GpsStatus;
 import android.location.Location;
 import android.location.LocationListener;
@@ -22,8 +26,10 @@ import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.os.PowerManager;
 import android.support.v7.app.NotificationCompat;
 import android.util.Log;
+import android.view.Display;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
@@ -59,6 +65,7 @@ public class DashCamService extends Service {
     public static String mRPiAddress = "";
     private boolean autohotspot = false;
     private static boolean gpslogpi = false;
+    private boolean gpslog = false;
 
     protected SQLiteDatabase db = null;
 
@@ -88,11 +95,21 @@ public class DashCamService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+
+        if (intent.getAction().equals(Constants.ACTION.STOPSERVICE)){
+            stopFFmpeg();
+            dispose = true;
+            IS_SERVICE_RUNNING=false;
+            if (ApManager.isApOn(getApplicationContext())) ApManager.configApState(getApplicationContext());
+            stopSelf();
+            return START_STICKY;
+        }
+
         SharedPreferences prefs = getSharedPreferences("Settings", MODE_PRIVATE);
         if (prefs.getBoolean("autostart", true)) autostarter = true;
         if (prefs.getBoolean("autohotspot", false)) autohotspot = true;
         if (prefs.getBoolean("gpslogpi", false)) gpslogpi = true;
-        boolean gpslog = prefs.getBoolean("gpslog",false);
+        gpslog = prefs.getBoolean("gpslog",false);
 
         if (gpslog) {
             setupGpsListeners();
@@ -118,16 +135,39 @@ public class DashCamService extends Service {
     private void mainLooper(){
         new Thread(new Runnable() {
             public void run() {
+                BluetoothAdapter mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
                 dispose = false;
                 int counter = 0;
+                int btCounter = 0;
+                boolean hotspotTerminated = false;
+                boolean weForceStopped = false;
                 while (!dispose) {
-                    if (autohotspot && !ApManager.isApOn(getApplicationContext())) ApManager.configApState(getApplicationContext());
-                    checkFFmpeg();
+                    if (!mBluetoothAdapter.isEnabled() && btCounter < 5) btCounter++;
+                    else if (mBluetoothAdapter.isEnabled()){
+                        btCounter = 0;
+                        hotspotTerminated = false;
+                    }
 
-                    // REAP the gps database
-                    if (counter == 0 && db != null) db.rawQuery("DELETE FROM gps WHERE time < (SELECT time FROM gps ORDER BY time DESC LIMIT 1 OFFSET 1000000)", null);
-                    else if (counter >= 720) counter = 0;
-                    else counter++;
+                    if (btCounter < 5) {
+                        if (autohotspot && !ApManager.isApOn(getApplicationContext()))
+                            ApManager.configApState(getApplicationContext());
+                        checkFFmpeg();
+                        if (weForceStopped){
+                            startFFmpeg();
+                            weForceStopped = false;
+                        }
+
+                        // REAP the gps database
+                        if (counter == 0 && db != null)
+                            db.rawQuery("DELETE FROM gps WHERE time < (SELECT time FROM gps ORDER BY time DESC LIMIT 1 OFFSET 1000000)", null);
+                        else if (counter >= 720) counter = 0;
+                        else counter++;
+                    } else if (!hotspotTerminated){
+                        stopFFmpeg();
+                        weForceStopped = true;
+                        if (ApManager.isApOn(getApplicationContext())) ApManager.configApState(getApplicationContext());
+                        hotspotTerminated = true;
+                    }
 
                     try {
                         Thread.sleep(5000);
@@ -193,7 +233,7 @@ public class DashCamService extends Service {
                     String response = "";
                     HttpURLConnection urlConnection = null;
 
-                    POSTDATA = "gpslog="+s;
+                    POSTDATA = "gpslog="+s+":"+System.currentTimeMillis()/1000;
                     URL url;
                     try {
                         url = new URL("http://"+mRPiAddress+":8888");
@@ -270,6 +310,8 @@ public class DashCamService extends Service {
 
                 Long tsLong = System.currentTimeMillis()/1000;
                 String POSTDATA = "record="+tsLong.toString();
+                if (gpslogpi && !gpslog) POSTDATA = "record=gps";
+
                 try {
                     URL url = new URL("http://"+mRPiAddress+":8888/record");
                     urlConnection = (HttpURLConnection) url.openConnection();
