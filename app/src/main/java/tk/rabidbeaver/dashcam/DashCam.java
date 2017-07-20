@@ -35,7 +35,7 @@ public class DashCam extends AppCompatActivity {
         fab.setOnClickListener(new FloatingActionButton.OnClickListener(){
             @Override
             public void onClick(View v) {
-                DashCamService.uploadLogs(dc);
+                DashCamService.uploadLogs(dc, Constants.LOG_ID.GPS_LOG);
             }
         });
     }
@@ -64,6 +64,8 @@ public class DashCam extends AppCompatActivity {
                     return new FilesFragment();
                 case 1:
                     return new SettingsFragment();
+                case 2:
+                    return new LogsFragment();
                 default:
                     return null;
             }
@@ -71,7 +73,7 @@ public class DashCam extends AppCompatActivity {
 
         @Override
         public int getCount() {
-            return 2;
+            return 3;
         }
 
         @Override
@@ -81,6 +83,8 @@ public class DashCam extends AppCompatActivity {
                     return "Files";
                 case 1:
                     return "Settings";
+                case 2:
+                    return "Error Logs";
             }
             return null;
         }

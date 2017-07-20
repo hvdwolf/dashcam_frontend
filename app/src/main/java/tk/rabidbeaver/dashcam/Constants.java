@@ -11,6 +11,11 @@ class Constants {
         String STOPSERVICE = "tk.rabidbeaver.dashcam.dascamservice.action.stopservice";
     }
 
+    interface LOG_ID {
+        int GPS_LOG = 0;
+        int CRASH_LOG = 1;
+    }
+
     interface NOTIFICATION_ID {
         int FOREGROUND_SERVICE = 101;
     }

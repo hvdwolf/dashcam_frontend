@@ -1,21 +1,19 @@
 package tk.rabidbeaver.dashcam;
 
+import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
-import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.hardware.display.DisplayManager;
 import android.location.GpsStatus;
 import android.location.Location;
 import android.location.LocationListener;
@@ -26,15 +24,11 @@ import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
 import android.os.Bundle;
 import android.os.IBinder;
-import android.os.PowerManager;
 import android.support.v7.app.NotificationCompat;
 import android.util.Log;
-import android.view.Display;
 
-import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -67,6 +61,7 @@ public class DashCamService extends Service {
     private boolean autohotspot = false;
     private static boolean gpslogpi = false;
     private boolean gpslog = false;
+    private int crashcount = 0;
 
     protected SQLiteDatabase db = null;
 
@@ -97,7 +92,7 @@ public class DashCamService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
 
-        if (intent.getAction().equals(Constants.ACTION.STOPSERVICE)){
+        if (intent != null && intent.getAction().equals(Constants.ACTION.STOPSERVICE)){
             stopFFmpeg();
             dispose = true;
             IS_SERVICE_RUNNING=false;
@@ -281,8 +276,8 @@ public class DashCamService extends Service {
     private void showNotification() {
         Intent notificationIntent = new Intent(this, DashCam.class);
         notificationIntent.setAction(Constants.ACTION.MAIN_ACTION);
-        notificationIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, 0);
+        notificationIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
 
         Bitmap icon = BitmapFactory.decodeResource(getResources(), R.drawable.lens);
 
@@ -410,6 +405,29 @@ public class DashCamService extends Service {
         if (mXml != null && mXml.containsKey("status") && mXml.get("status").contentEquals("running")) updateNotification(true, true);
         else if (!forcestopped) startFFmpeg();
         else updateNotification(true, false);
+
+        if (mXml != null && mXml.containsKey("crashcount")){
+            int mCrashcount = Integer.parseInt(mXml.get("crashcount"));
+            if (mCrashcount > crashcount){
+                crashcount = mCrashcount;
+
+                Intent notificationIntent = new Intent(this, DashCam.class);
+                notificationIntent.setAction(Constants.ACTION.MAIN_ACTION);
+                notificationIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, 0);
+
+                NotificationCompat.Builder crashnot = new NotificationCompat.Builder(this);
+                crashnot.setContentTitle("DashCam ERROR")
+                        .setTicker("Picamd has CRASHED "+crashcount+" times.")
+                        .setSmallIcon(R.drawable.ic_videocam_off)
+                        .setContentIntent(pendingIntent)
+                        .setOngoing(false);
+
+                Notification crashmnot = crashnot.build();
+                NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                nm.notify(17, crashmnot);
+            }
+        }
     }
 
     private void updateNotification(Boolean connected, Boolean recording) {
@@ -463,18 +481,25 @@ public class DashCamService extends Service {
         return null;
     }
 
-    protected static void uploadLogs(Context ctx){
+    protected static void uploadLogs(Context ctx, int logId){
         Intent intent = new Intent(android.content.Intent.ACTION_SEND);
-        intent.setType("application/octet-stream");
+        if (logId == Constants.LOG_ID.GPS_LOG)
+            intent.setType("application/octet-stream");
+        else intent.setType("text/plain");
         SharedPreferences st = ctx.getSharedPreferences("Settings", MODE_PRIVATE);
 
         String send = st.getString("sendto","");
 
-        if (gpslogpi)
-            intent.putExtra(Intent.EXTRA_STREAM, Uri.parse("content://tk.rabidbeaver.dashcam.DataProvider/gps.db"));
-        else
-            intent.putExtra(Intent.EXTRA_STREAM, Uri.parse("content://tk.rabidbeaver.dashcam.DataProvider/databases/dashcam.db"));
-        intent.putExtra(Intent.EXTRA_SUBJECT, "dashcam_"+new SimpleDateFormat("yyyy.MM.dd HH:mm:ss z", Locale.US).format(new Date())+".db");
+        if (logId == Constants.LOG_ID.GPS_LOG) {
+            if (gpslogpi)
+                intent.putExtra(Intent.EXTRA_STREAM, Uri.parse("content://tk.rabidbeaver.dashcam.DataProvider/gps.db"));
+            else
+                intent.putExtra(Intent.EXTRA_STREAM, Uri.parse("content://tk.rabidbeaver.dashcam.DataProvider/databases/dashcam.db"));
+            intent.putExtra(Intent.EXTRA_SUBJECT, "dashcam_" + new SimpleDateFormat("yyyy.MM.dd HH:mm:ss z", Locale.US).format(new Date()) + ".db");
+        } else { // logId == Constants.LOG_ID.CRASH_LOG
+            intent.putExtra(Intent.EXTRA_STREAM, Uri.parse("content://tk.rabidbeaver.dashcam.DataProvider/crashlog"));
+            intent.putExtra(Intent.EXTRA_SUBJECT, "dashcam_crash_" + new SimpleDateFormat("yyyy.MM.dd HH:mm:ss z", Locale.US).format(new Date()) + ".log");
+        }
 
         if (send.length() == 0 && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP_MR1){
             Intent rIntent = new Intent(ctx, SendSelectionReceiver.class);
@@ -514,6 +539,12 @@ public class DashCamService extends Service {
 
             @Override
             public void onServiceLost(NsdServiceInfo service) {
+                //dispose = true;
+                //mRPiAddress = "";
+                //updateNotification(false);
+                //TODO: I dont think this is the network service being lost, I think its the NSD being lost.
+                // When the network service is no longer available.
+                // Internal bookkeeping code goes here.
             }
 
             @Override
@@ -552,6 +583,7 @@ public class DashCamService extends Service {
                 String address = host.getHostAddress();
                 Log.d("NSD", "Resolved address = " + address);
 
+                //TODO: Sometimes this seems to be picking up an IPv6 address.
                 mRPiAddress = address;
 
                 if (autostarter && !forcestopped) startFFmpeg();
