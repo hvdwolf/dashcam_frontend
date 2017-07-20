@@ -10,22 +10,23 @@ import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentPagerAdapter;
 import android.support.v4.view.ViewPager;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 
 public class DashCam extends AppCompatActivity {
     static DashCam dc;
+    private ViewPager mViewPager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
         dc = DashCam.this;
 
         setContentView(R.layout.activity_dash_cam);
 
         SectionsPagerAdapter mSectionsPagerAdapter = new SectionsPagerAdapter(getSupportFragmentManager());
 
-        ViewPager mViewPager = (ViewPager) findViewById(R.id.container);
+        mViewPager = (ViewPager) findViewById(R.id.container);
         mViewPager.setAdapter(mSectionsPagerAdapter);
 
         TabLayout tabLayout = (TabLayout) findViewById(R.id.tabs);
@@ -38,12 +39,13 @@ public class DashCam extends AppCompatActivity {
                 DashCamService.uploadLogs(dc, Constants.LOG_ID.GPS_LOG);
             }
         });
+
+        if (getIntent().getAction().contentEquals(Constants.ACTION.ERROR_ACT)) mViewPager.setCurrentItem(2);
     }
 
     @Override
     protected void onStart() {
         super.onStart();
-
         if (!DashCamService.IS_SERVICE_RUNNING) {
             Intent service = new Intent(DashCam.this, DashCamService.class);
             service.setAction(Constants.ACTION.STARTFOREGROUND_ACTION);

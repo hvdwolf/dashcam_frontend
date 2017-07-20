@@ -409,17 +409,15 @@ public class DashCamService extends Service {
         if (mXml != null && mXml.containsKey("crashcount")){
             int mCrashcount = Integer.parseInt(mXml.get("crashcount"));
             if (mCrashcount > crashcount){
-                crashcount = mCrashcount;
-
                 Intent notificationIntent = new Intent(this, DashCam.class);
-                notificationIntent.setAction(Constants.ACTION.MAIN_ACTION);
+                notificationIntent.setAction(Constants.ACTION.ERROR_ACT);
                 notificationIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                 PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, 0);
 
                 NotificationCompat.Builder crashnot = new NotificationCompat.Builder(this);
                 crashnot.setContentTitle("DashCam ERROR")
                         .setTicker("Picamd has CRASHED "+crashcount+" times.")
-                        .setSmallIcon(R.drawable.ic_videocam_off)
+                        .setSmallIcon(R.drawable.ic_error_white)
                         .setContentIntent(pendingIntent)
                         .setOngoing(false);
 
@@ -427,6 +425,7 @@ public class DashCamService extends Service {
                 NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
                 nm.notify(17, crashmnot);
             }
+            crashcount = mCrashcount;
         }
     }
 

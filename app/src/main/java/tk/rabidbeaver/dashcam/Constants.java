@@ -9,6 +9,7 @@ class Constants {
         String STARTFOREGROUND_ACTION = "tk.rabidbeaver.dashcam.dashcamservice.action.startforeground";
         String RELOADGPS = "tk.rabidbeaver.dashcam.dashcamservice.action.reloadgps";
         String STOPSERVICE = "tk.rabidbeaver.dashcam.dascamservice.action.stopservice";
+        String ERROR_ACT = "tk.rabidbeaver.dashcam.dashcamservice.action.error";
     }
 
     interface LOG_ID {
