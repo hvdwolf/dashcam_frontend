@@ -503,7 +503,10 @@ public class DashCamService extends Service {
         if (send.length() == 0 && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP_MR1){
             Intent rIntent = new Intent(ctx, SendSelectionReceiver.class);
             PendingIntent pIntent = PendingIntent.getBroadcast(ctx, 0, rIntent, PendingIntent.FLAG_CANCEL_CURRENT);
-            ctx.startActivity(Intent.createChooser(intent, "Send Logs to...", pIntent.getIntentSender()));
+            if (logId == Constants.LOG_ID.GPS_LOG)
+                ctx.startActivity(Intent.createChooser(intent, "Send GPS trace logs to...", pIntent.getIntentSender()));
+            else // logId == Constants.LOG_ID.CRASH_LOG
+                ctx.startActivity(Intent.createChooser(intent, "Send ERROR log to...", pIntent.getIntentSender()));
         } else {
             if (send.length() > 0){
                 String[] cmp = send.split("/");
