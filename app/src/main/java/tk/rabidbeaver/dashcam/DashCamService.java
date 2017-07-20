@@ -43,6 +43,7 @@ import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Locale;
 
 public class DashCamService extends Service {
@@ -312,6 +313,8 @@ public class DashCamService extends Service {
                 String POSTDATA = "record="+tsLong.toString();
                 if (gpslogpi && !gpslog) POSTDATA = "record=gps";
 
+                HashMap<String, String> mXml = null;
+
                 try {
                     URL url = new URL("http://"+mRPiAddress+":8888/record");
                     urlConnection = (HttpURLConnection) url.openConnection();
@@ -326,15 +329,8 @@ public class DashCamService extends Service {
                     int responseCode = urlConnection.getResponseCode();
                     Log.d("RECORD","code: " + responseCode);
 
-                    if (responseCode == HttpURLConnection.HTTP_OK) { //success
-                        BufferedReader in = new BufferedReader(new InputStreamReader(urlConnection.getInputStream()));
-                        String inputLine;
-
-                        while ((inputLine = in.readLine()) != null) {
-                            response+=inputLine;
-                        }
-                        in.close();
-                    }
+                    if (responseCode == HttpURLConnection.HTTP_OK) //success
+                        mXml = XmlParser.parse(urlConnection.getInputStream(), "ffmpeg");
 
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -342,7 +338,7 @@ public class DashCamService extends Service {
                 Log.d("RECORD",response);
                 if (urlConnection != null) urlConnection.disconnect();
 
-                if (response.contains("<ffmpeg status=\"running\" />")) updateNotification(true, true);
+                if (mXml != null && mXml.containsKey("status") && mXml.get("status").contentEquals("running")) updateNotification(true, true);
             }
         }).start();
     }
@@ -353,23 +349,23 @@ public class DashCamService extends Service {
             public void run() {
                 String response = "";
                 HttpURLConnection urlConnection = null;
+                HashMap<String, String> mXml = null;
                 try {
                     URL url = new URL("http://"+mRPiAddress+":8888/stop");
                     urlConnection = (HttpURLConnection) url.openConnection();
 
-                    InputStream in = new BufferedInputStream(urlConnection.getInputStream());
-                    BufferedReader br = new BufferedReader(new InputStreamReader(in));
-                    String line;
-                    while ((line = br.readLine()) != null) {
-                        response += line;
-                    }
+                    int responseCode = urlConnection.getResponseCode();
+                    Log.d("RECORD","code: " + responseCode);
+
+                    if (responseCode == HttpURLConnection.HTTP_OK) //success
+                        mXml = XmlParser.parse(urlConnection.getInputStream(), "ffmpeg");
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
                 Log.d("STOP",response);
                 if (urlConnection != null) urlConnection.disconnect();
 
-                if (response.contains("<ffmpeg status=\"terminated\" />")) updateNotification(true, false);
+                if (mXml != null && mXml.containsKey("status") && mXml.get("status").contentEquals("terminated")) updateNotification(true, false);
             }
         }).start();
     }
@@ -377,6 +373,7 @@ public class DashCamService extends Service {
     private void checkFFmpeg(){
         String response = "";
         HttpURLConnection urlConnection;
+        HashMap<String, String> mXml = null;
         try {
             URL url = new URL("http://" + mRPiAddress + ":8888/check");
             urlConnection = (HttpURLConnection) url.openConnection();
@@ -399,20 +396,18 @@ public class DashCamService extends Service {
         }
 
         try {
-            InputStream in = new BufferedInputStream(urlConnection.getInputStream());
-            BufferedReader br = new BufferedReader(new InputStreamReader(in));
-            String line;
-            while ((line = br.readLine()) != null) {
-                response += line;
-            }
+            int responseCode = urlConnection.getResponseCode();
+            Log.d("RECORD","code: " + responseCode);
+
+            if (responseCode == HttpURLConnection.HTTP_OK) //success
+                mXml = XmlParser.parse(urlConnection.getInputStream(), "ffmpeg");
         } catch (IOException ioe){
             ioe.printStackTrace();
         }
         Log.d("CHECK",response);
         urlConnection.disconnect();
 
-        //TODO: this is an ugly way to use XML...
-        if (response.contains("<ffmpeg status=\"running\" />")) updateNotification(true, true);
+        if (mXml != null && mXml.containsKey("status") && mXml.get("status").contentEquals("running")) updateNotification(true, true);
         else if (!forcestopped) startFFmpeg();
         else updateNotification(true, false);
     }
@@ -519,12 +514,6 @@ public class DashCamService extends Service {
 
             @Override
             public void onServiceLost(NsdServiceInfo service) {
-                //dispose = true;
-                //mRPiAddress = "";
-                //updateNotification(false);
-                //TODO: I dont think this is the network service being lost, I think its the NSD being lost.
-                // When the network service is no longer available.
-                // Internal bookkeeping code goes here.
             }
 
             @Override
@@ -563,7 +552,6 @@ public class DashCamService extends Service {
                 String address = host.getHostAddress();
                 Log.d("NSD", "Resolved address = " + address);
 
-                //TODO: Sometimes this seems to be picking up an IPv6 address.
                 mRPiAddress = address;
 
                 if (autostarter && !forcestopped) startFFmpeg();

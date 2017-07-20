@@ -25,15 +25,11 @@ import android.widget.TextView;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserFactory;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.io.StringReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 import static android.content.Context.MODE_PRIVATE;
@@ -91,32 +87,27 @@ public class FilesFragment extends Fragment {
         new Thread(new Runnable() {
             public void run() {
                 Log.d("LIST", "mRPiAddress: " + DashCamService.mRPiAddress);
+                if (pullrefresher != null) {
+                    pullrefresher.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            pullrefresher.setRefreshing(true);
+                        }
+                    });
+                }
+
                 List<ProtectString> files = new ArrayList<>();
                 if (DashCamService.mRPiAddress.length() > 0) {
 
-                    String response = "";
                     HttpURLConnection urlConnection = null;
                     try {
                         URL url = new URL("http://" + DashCamService.mRPiAddress + ":8888/list");
                         urlConnection = (HttpURLConnection) url.openConnection();
 
-                        InputStream in = new BufferedInputStream(urlConnection.getInputStream());
-                        BufferedReader br = new BufferedReader(new InputStreamReader(in));
-                        String line;
-                        while ((line = br.readLine()) != null) {
-                            response += line;
-                        }
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                    Log.d("LIST", response);
-                    if (urlConnection != null) urlConnection.disconnect();
-
-                    try {
                         XmlPullParserFactory factory = XmlPullParserFactory.newInstance();
                         factory.setNamespaceAware(true);
                         XmlPullParser xpp = factory.newPullParser();
-                        xpp.setInput(new StringReader(response));
+                        xpp.setInput(urlConnection.getInputStream(), null);
 
                         int eventType = xpp.getEventType();
                         while (eventType != XmlPullParser.END_DOCUMENT) {
@@ -132,6 +123,7 @@ public class FilesFragment extends Fragment {
                         }
                     } catch (Exception e){e.printStackTrace();}
 
+                    if (urlConnection != null) urlConnection.disconnect();
                 } else {
                     new Thread(new Runnable() {
                         public void run() {
@@ -171,6 +163,8 @@ public class FilesFragment extends Fragment {
                 String response = "";
                 HttpURLConnection urlConnection = null;
                 String POSTDATA = action+"="+p;
+                HashMap<String, String> mXml = null;
+
                 try {
                     URL url = new URL("http://"+DashCamService.mRPiAddress+":8888");
                     urlConnection = (HttpURLConnection) url.openConnection();
@@ -183,17 +177,10 @@ public class FilesFragment extends Fragment {
                     // For POST only - END
 
                     int responseCode = urlConnection.getResponseCode();
-                    Log.d("MOVE","code: " + responseCode);
+                    Log.d("RECORD","code: " + responseCode);
 
-                    if (responseCode == HttpURLConnection.HTTP_OK) { //success
-                        BufferedReader in = new BufferedReader(new InputStreamReader(urlConnection.getInputStream()));
-                        String inputLine;
-
-                        while ((inputLine = in.readLine()) != null) {
-                            response+=inputLine;
-                        }
-                        in.close();
-                    }
+                    if (responseCode == HttpURLConnection.HTTP_OK) //success
+                        mXml = XmlParser.parse(urlConnection.getInputStream(), "fileop");
 
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -201,7 +188,7 @@ public class FilesFragment extends Fragment {
                 Log.d("MOVE",response);
                 if (urlConnection != null) urlConnection.disconnect();
 
-                if (response.contains("<fileop status=\"success\" />")){
+                if (mXml != null && mXml.containsKey("status") && mXml.get("status").contentEquals("success")){
                     reloadData();
                     SharedPreferences sp = FilesFragment.this.getActivity().getSharedPreferences("Settings", MODE_PRIVATE);
                     if (prot && sp.getBoolean("autosave", false)){
@@ -293,6 +280,7 @@ public class FilesFragment extends Fragment {
                                             String response = "";
                                             HttpURLConnection urlConnection = null;
                                             String POSTDATA = "delete="+f.filename;
+                                            HashMap<String, String> mXml = null;
                                             try {
                                                 URL url = new URL("http://"+DashCamService.mRPiAddress+":8888");
                                                 urlConnection = (HttpURLConnection) url.openConnection();
@@ -305,17 +293,10 @@ public class FilesFragment extends Fragment {
                                                 // For POST only - END
 
                                                 int responseCode = urlConnection.getResponseCode();
-                                                Log.d("DELETE","code: " + responseCode);
+                                                Log.d("RECORD","code: " + responseCode);
 
-                                                if (responseCode == HttpURLConnection.HTTP_OK) { //success
-                                                    BufferedReader in = new BufferedReader(new InputStreamReader(urlConnection.getInputStream()));
-                                                    String inputLine;
-
-                                                    while ((inputLine = in.readLine()) != null) {
-                                                        response+=inputLine;
-                                                    }
-                                                    in.close();
-                                                }
+                                                if (responseCode == HttpURLConnection.HTTP_OK) //success
+                                                    mXml = XmlParser.parse(urlConnection.getInputStream(), "fileop");
 
                                             } catch (Exception e) {
                                                 e.printStackTrace();
@@ -323,7 +304,7 @@ public class FilesFragment extends Fragment {
                                             Log.d("DELETE",response);
                                             if (urlConnection != null) urlConnection.disconnect();
 
-                                            if (response.contains("<fileop status=\"success\" />")) reloadData();
+                                            if (mXml != null && mXml.containsKey("status") && mXml.get("status").contentEquals("success")) reloadData();
 
                                         }
                                     }).start();
