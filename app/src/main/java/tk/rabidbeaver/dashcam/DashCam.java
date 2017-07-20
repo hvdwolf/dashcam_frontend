@@ -40,7 +40,7 @@ public class DashCam extends AppCompatActivity {
             }
         });
 
-        if (getIntent().getAction().contentEquals(Constants.ACTION.ERROR_ACT)) mViewPager.setCurrentItem(2);
+        if (getIntent() != null && getIntent().getAction() != null && getIntent().getAction().contentEquals(Constants.ACTION.ERROR_ACT)) mViewPager.setCurrentItem(2);
     }
 
     @Override
