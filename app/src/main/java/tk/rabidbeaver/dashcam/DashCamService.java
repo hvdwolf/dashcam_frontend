@@ -5,10 +5,12 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
@@ -62,16 +64,44 @@ public class DashCamService extends Service {
     private static boolean gpslogpi = false;
     private boolean gpslog = false;
     private int crashcount = 0;
+    private boolean broadcastTriggers = false;
+    private boolean accOn = false;
 
     protected SQLiteDatabase db = null;
 
     // The NSD service type that the RPi exposes.
     private static final String SERVICE_TYPE = "_workstation._tcp.";
 
+    private BroadcastReceiver receiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            broadcastTriggers = true;
+            if (!accOn && intent.getAction().contentEquals("tk.rabidbeaver.maincontroller.ACC_ON")){
+                accOn = true;
+                if (!ApManager.isApOn(getApplicationContext())) {
+                    ApManager.configApState(getApplicationContext());
+                    destroyPiFinder();
+                    initializePiFinder();
+                }
+                startFFmpeg();
+            } else if (accOn && intent.getAction().contentEquals("tk.rabidbeaver.maincontroller.ACC_OFF")) {
+                accOn = false;
+                stopFFmpeg();
+                if (ApManager.isApOn(getApplicationContext()))
+                    ApManager.configApState(getApplicationContext());
+            }
+        }
+    };
+
     @Override
     public void onCreate() {
         super.onCreate();
         mRPiAddress = "";
+
+        IntentFilter filter = new IntentFilter();
+        filter.addAction("tk.rabidbeaver.maincontroller.ACC_ON");
+        filter.addAction("tk.rabidbeaver.maincontroller.ACC_OFF");
+        registerReceiver(receiver, filter);
 
         db = new SQLiteOpenHelper(this, "dashcam.db", null, DATABASE_VERSION){
             public void onCreate(SQLiteDatabase db) {
@@ -83,10 +113,6 @@ public class DashCamService extends Service {
                 // DO NOTHING.
             }
         }.getWritableDatabase();
-
-        mNsdManager = (NsdManager)(getApplicationContext().getSystemService(Context.NSD_SERVICE));
-        initializeDiscoveryListener();
-        mNsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, mDiscoveryListener);
     }
 
     @Override
@@ -118,13 +144,15 @@ public class DashCamService extends Service {
 
         if (!IS_SERVICE_RUNNING) {
             showNotification();
-        } else {
+            initializePiFinder();
+        } else if (intent != null && intent.getAction() != null) {
             if (intent.getAction().equals(Constants.ACTION.ACTION_RECORD) || (intent.getAction().equals(Constants.ACTION.STARTFOREGROUND_ACTION) && autostarter)) {
                 startFFmpeg();
             } else if (intent.getAction().equals(Constants.ACTION.ACTION_STOP)) {
                 stopFFmpeg();
             }
         }
+
         return START_STICKY;
     }
 
@@ -138,31 +166,46 @@ public class DashCamService extends Service {
                 boolean hotspotTerminated = false;
                 boolean weForceStopped = false;
                 while (!dispose) {
-                    if (!mBluetoothAdapter.isEnabled() && btCounter < 5) btCounter++;
-                    else if (mBluetoothAdapter.isEnabled()){
-                        btCounter = 0;
-                        hotspotTerminated = false;
+                    if (autohotspot && !broadcastTriggers) {
+                        if (!mBluetoothAdapter.isEnabled() && btCounter < 5) btCounter++;
+                        else if (mBluetoothAdapter.isEnabled()) {
+                            btCounter = 0;
+                            hotspotTerminated = false;
+                        }
+                        if (btCounter < 5) {
+                            if (autohotspot && !ApManager.isApOn(getApplicationContext())) {
+                                ApManager.configApState(getApplicationContext());
+                                destroyPiFinder();
+                                initializePiFinder();
+                            }
+                            checkFFmpeg();
+                            if (weForceStopped) {
+                                startFFmpeg();
+                                weForceStopped = false;
+                            }
+                        } else if (!hotspotTerminated) {
+                            stopFFmpeg();
+                            weForceStopped = true;
+                            if (ApManager.isApOn(getApplicationContext()))
+                                ApManager.configApState(getApplicationContext());
+                            hotspotTerminated = true;
+                        }
+                    } else if (!broadcastTriggers || (broadcastTriggers && accOn)){
+                        if (!existsPiFinder()) initializePiFinder();
+                        checkFFmpeg();
                     }
 
-                    if (btCounter < 5) {
-                        if (autohotspot && !ApManager.isApOn(getApplicationContext()))
-                            ApManager.configApState(getApplicationContext());
-                        checkFFmpeg();
-                        if (weForceStopped){
-                            startFFmpeg();
-                            weForceStopped = false;
-                        }
+                    if (mRPiAddress.contains("169.254")){
+                        destroyPiFinder();
+                        initializePiFinder();
+                    }
 
+                    if (gpslog && !gpslogpi) {
                         // REAP the gps database
                         if (counter == 0 && db != null)
                             db.rawQuery("DELETE FROM gps WHERE time < (SELECT time FROM gps ORDER BY time DESC LIMIT 1 OFFSET 1000000)", null);
                         else if (counter >= 720) counter = 0;
                         else counter++;
-                    } else if (!hotspotTerminated){
-                        stopFFmpeg();
-                        weForceStopped = true;
-                        if (ApManager.isApOn(getApplicationContext())) ApManager.configApState(getApplicationContext());
-                        hotspotTerminated = true;
                     }
 
                     try {
@@ -313,6 +356,8 @@ public class DashCamService extends Service {
                 try {
                     URL url = new URL("http://"+mRPiAddress+":8888/record");
                     urlConnection = (HttpURLConnection) url.openConnection();
+                    urlConnection.setConnectTimeout(2000);
+                    urlConnection.setReadTimeout(2000);
                     urlConnection.setRequestMethod("POST");
                     urlConnection.setDoOutput(true);
                     OutputStream os = urlConnection.getOutputStream();
@@ -348,6 +393,8 @@ public class DashCamService extends Service {
                 try {
                     URL url = new URL("http://"+mRPiAddress+":8888/stop");
                     urlConnection = (HttpURLConnection) url.openConnection();
+                    urlConnection.setConnectTimeout(2000);
+                    urlConnection.setReadTimeout(2000);
 
                     int responseCode = urlConnection.getResponseCode();
                     Log.d("RECORD","code: " + responseCode);
@@ -369,6 +416,7 @@ public class DashCamService extends Service {
         String response = "";
         HttpURLConnection urlConnection;
         HashMap<String, String> mXml = null;
+        Log.d("DASHCAM", "rpiAddress: "+mRPiAddress);
         try {
             URL url = new URL("http://" + mRPiAddress + ":8888/check");
             urlConnection = (HttpURLConnection) url.openConnection();
@@ -392,7 +440,7 @@ public class DashCamService extends Service {
 
         try {
             int responseCode = urlConnection.getResponseCode();
-            Log.d("RECORD","code: " + responseCode);
+            Log.d("CHECK","code: " + responseCode);
 
             if (responseCode == HttpURLConnection.HTTP_OK) //success
                 mXml = XmlParser.parse(urlConnection.getInputStream(), "ffmpeg");
@@ -473,6 +521,7 @@ public class DashCamService extends Service {
         mRPiAddress = "";
         Log.d(LOG_TAG, "In onDestroy");
         IS_SERVICE_RUNNING=false;
+        destroyPiFinder();
     }
 
     @Override
@@ -516,7 +565,8 @@ public class DashCamService extends Service {
         }
     }
 
-    private void initializeDiscoveryListener() {
+    private void initializePiFinder() {
+        mNsdManager = (NsdManager)(getApplicationContext().getSystemService(Context.NSD_SERVICE));
 
         // Instantiate a new DiscoveryListener
         mDiscoveryListener = new NsdManager.DiscoveryListener() {
@@ -535,12 +585,37 @@ public class DashCamService extends Service {
                 Log.d("NSD", "Service Type=" + type);
                 if (type.equals(SERVICE_TYPE) && name.contains("pizwcam")) {
                     Log.d("NSD", "Service Found @ '" + name + "'");
-                    mNsdManager.resolveService(service, getResolveListener());
+                    mNsdManager.resolveService(service, new NsdManager.ResolveListener() {
+
+                        @Override
+                        public void onResolveFailed(NsdServiceInfo serviceInfo, int errorCode) {
+                            // Called when the resolve fails.  Use the error code to debug.
+                            Log.e("NSD", "Resolve failed " + errorCode);
+                        }
+
+                        @Override
+                        public void onServiceResolved(NsdServiceInfo serviceInfo) {
+                            mServiceInfo = serviceInfo;
+
+                            // Port is being returned as 9. Not needed.
+                            //int port = mServiceInfo.getPort();
+
+                            InetAddress host = mServiceInfo.getHost();
+                            String address = host.getHostAddress();
+                            if (address.contains(":")) address = "["+address+"]"; // this is IPv6!
+                            Log.d("NSD", "Resolved address = " + address);
+
+                            mRPiAddress = address;
+
+                            if (autostarter && !forcestopped) startFFmpeg();
+                        }
+                    });
                 }
             }
 
             @Override
             public void onServiceLost(NsdServiceInfo service) {
+                Log.d("NSD", "onServiceLost");
                 //dispose = true;
                 //mRPiAddress = "";
                 //updateNotification(false);
@@ -551,45 +626,34 @@ public class DashCamService extends Service {
 
             @Override
             public void onDiscoveryStopped(String serviceType) {
+                Log.d("NSD", "onDiscoveryStopped: "+serviceType);
             }
 
             @Override
             public void onStartDiscoveryFailed(String serviceType, int errorCode) {
+                Log.d("NSD", "onStartDiscoveryFailed: "+serviceType+", "+errorCode);
                 mNsdManager.stopServiceDiscovery(this);
             }
 
             @Override
             public void onStopDiscoveryFailed(String serviceType, int errorCode) {
+                Log.d("NSD", "onStopDiscoveryFailed: "+serviceType+", "+errorCode);
                 mNsdManager.stopServiceDiscovery(this);
             }
         };
+
+        mNsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, mDiscoveryListener);
     }
 
-    private NsdManager.ResolveListener getResolveListener() {
-        return new NsdManager.ResolveListener() {
+    private void destroyPiFinder(){
+        if (mNsdManager != null && mDiscoveryListener != null) {
+            mNsdManager.stopServiceDiscovery(mDiscoveryListener);
+            mDiscoveryListener = null;
+            mNsdManager = null;
+        }
+    }
 
-            @Override
-            public void onResolveFailed(NsdServiceInfo serviceInfo, int errorCode) {
-                // Called when the resolve fails.  Use the error code to debug.
-                Log.e("NSD", "Resolve failed" + errorCode);
-            }
-
-            @Override
-            public void onServiceResolved(NsdServiceInfo serviceInfo) {
-                mServiceInfo = serviceInfo;
-
-                // Port is being returned as 9. Not needed.
-                //int port = mServiceInfo.getPort();
-
-                InetAddress host = mServiceInfo.getHost();
-                String address = host.getHostAddress();
-                Log.d("NSD", "Resolved address = " + address);
-
-                //TODO: Sometimes this seems to be picking up an IPv6 address.
-                mRPiAddress = address;
-
-                if (autostarter && !forcestopped) startFFmpeg();
-            }
-        };
+    private boolean existsPiFinder(){
+        return mNsdManager != null && mDiscoveryListener != null;
     }
 }

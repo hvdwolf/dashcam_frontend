@@ -2,6 +2,7 @@ package tk.rabidbeaver.dashcam;
 
 import android.content.ContentProvider;
 import android.content.ContentValues;
+import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
@@ -10,6 +11,7 @@ import android.support.annotation.NonNull;
 import android.util.Log;
 
 import java.io.BufferedInputStream;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -64,7 +66,11 @@ public class DataProvider extends ContentProvider implements ContentProvider.Pip
 
         try {
             if (uri.getPath().contains("/databases/dashcam.db")){
-                in = new FileInputStream(getContext().getDatabasePath("dashcam.db"));
+                File dbfile;
+                Context c = getContext();
+                if (c != null && (dbfile = c.getDatabasePath("dashcam.db")) != null)
+                    in = new FileInputStream(dbfile);
+                else return;
             } else {
                 Log.d("DATAPROVIDER","http://" + DashCamService.mRPiAddress + ":8888" + uri.getEncodedPath() + (mimeType.contains("video")?"?gpslog":""));
                 URL url = new URL("http://" + DashCamService.mRPiAddress + ":8888" + uri.getEncodedPath() + (mimeType.contains("video")?"?gpslog":""));
